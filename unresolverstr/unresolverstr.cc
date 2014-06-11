@@ -1,0 +1,1523 @@
+/**********************************************************************
+ ** unresolverstr
+ ***********************************************************************
+ 
+    FILE: unresolverstr.cc from hashcs.cc
+
+
+    AUTHOR:
+        Copyright (C) 2006, 2007 Seung-Jin Sul
+        Dept. of Computer Science
+        Texas A&M University
+        College Station, Texas, U.S.A.
+        (contact: sulsj@cs.tamu.edu)
+
+    HISTORY:
+
+    06.13.2007 (v.1.0.0)
+
+    06.14.2007 (v.1.0.1)
+        - Add Consense::ConsenseTrees()
+
+    06.21.2007 (v.1.0.3)
+        - Add "delete bs_str" in HashMap::hashing_bs_without_type3_nbits_hashconsense()
+          to fix memory leak
+        - Use assign() in Consense::ConsenseTrees() to improve
+
+    06.22.2007 (v.1.0.4)
+        - Modify conversion routine in HashMap::hashing_bs_without_type3_nbits_hashconsense()
+          to optimize
+
+    08.06.2007 (v.1.0.6)
+        - For new SC constructing algorithm
+
+    08.16.2007
+        - Consense.cpp optimization
+
+    08.23.2007
+        - New consensus tree construction routine completed.
+
+    09.07.2007
+        - Integration with 64-bit bitstring
+        - vec_bucket = iter_hashcs->second; and vec_bucket[i]
+          ===> (iter_hashcs->second).size(); // remove copy
+        - hashmap.cc ==> hashing_bs_without_type3_64bits()
+
+    09.11.2007 Hash function
+        - hv.hv1 += _a1[i]*ii;
+          hv.hv2 += _a2[i]*ii;
+          ==>
+          hv.hv1 += _a1[i];
+          hv.hv2 += _a2[i];
+
+    09.19.2007
+        - New tree constructing routine
+        - map<string, SCNode*> ==> map<string, unsigned>
+
+    10.23.2007 Implicit bipartitions
+        - Each node stores its hash code
+        - If leaf, just get the a1[i] and a2[i] values
+        - If internal node, get the childrens hash code and modular by m1 and m2.
+
+    10.24.2007 Implicit BP is only applied with n-bit implementation
+
+    10.27.2007 Optimization
+        - Hashmap => vector
+        - string bitstring in bucket structure => BitSet*
+        - uhashfunc_init ==> two verisons (64-bit and n-bit)
+        - vvec_hashcs.resize()
+
+    11.12.2007 DEBUG
+        - In hashfunc.cc --> top2 = c*t*n;
+
+    11.13.2007 data type
+        - int --> unsigned
+        - unsigned long long
+
+    11.16.2007 DEBUG
+        - prime number generator: fix fot the bigger number (from)
+
+      07.11.2008 New ditribution method for TCBB'08 paper
+        - Serial random number gegnerator is replaced with random shuffling
+
+*/
+/**********************************************************************/
+
+//      This program is free software; you can redistribute it and/or modify
+//      it under the terms of the GNU General Public License as published by
+//      the Free Software Foundation; either version 2 of the License, or
+//      (at your option) any later version.
+//      
+//      This program is distributed in the hope that it will be useful,
+//      but WITHOUT ANY WARRANTY; without even the implied warranty of
+//      MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+//      GNU General Public License for more details.
+//      
+//      You should have received a copy of the GNU General Public License
+//      along with this program; if not, write to the Free Software
+//      Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+//      MA 02110-1301, USA.
+
+
+// My classes
+#include "hashfunc.hh"
+#include "hashmap.hh"
+#include "SCTree.hh"
+#include "SCNode.hh"
+
+// From Split-Dist
+#include "label-map.hh"
+#include "bitset.hh"
+
+// Etc
+#include <cassert>
+#include <sys/time.h>
+#include <sys/resource.h>
+
+// For newick parser
+extern "C" {
+#include <newick.h>
+}
+
+#include <./tclap/CmdLine.h>
+#include "randomc.h"                   // define classes for random number generators
+
+#define BITS                            64 // the length of bit string using in PGM
+#define LEFT                            0
+#define RIGHT                           1
+#define ROOT                            2
+
+// Set a random number for m1 (= Initial size of hash table)
+// m1 is the closest value to (t*n)+(t*n*HASHTABLE_FACTOR)
+#define HASHTABLE_FACTOR                0.2
+
+//#define TIMECHECK
+//#define NDEBUG
+
+// if double collision is reported, increase this!
+// the c value of m2 > c*t*n in the paper
+static unsigned long C                   = 1000;
+static unsigned         NUM_TAXA         = 0;    // Number of taxa
+
+void
+GetTaxaLabels2(
+    NEWICKNODE *node,
+    LabelMap &lm)
+{
+    if (node->Nchildren == 0) {
+        string temp(node->label);
+        lm.push(temp);
+    } else
+        for(int i=0; i<node->Nchildren; ++i)
+            GetTaxaLabels2(node->child[i], lm);
+}
+
+void
+dfs_resolve_one(
+    SCNode* node,
+    TRandomMersenne& rg,
+    SCTree* sctree,
+    vector<SCNode*> &vec_trashcan_SCNODEp)
+{
+    if (node == NULL) return;
+
+    unsigned numChildren = node->NumChildren();
+
+    if (numChildren != 0) {
+        for (unsigned i=0; i<numChildren; ++i) {
+            dfs_resolve_one(node->children[i], rg, sctree, vec_trashcan_SCNODEp);
+        }
+
+        // if numChildren > 2
+        // then make the children in to a binary tree
+        //
+        // 1. randomly select 2 children nodes
+        // 2. add two internal nodes, intNodeA and intNodeB
+        // 3. dangle two choosed nodes as children of intNodeA
+        // 4. dangle the other nodes as children of intNodeB
+
+        if (numChildren == 3) {
+            vector<int> vec_r;
+            int32 ir;
+            for (unsigned i=0; i<2; ++i) {
+                ir = rg.IRandom(0, numChildren-1);
+                if (find(vec_r.begin(), vec_r.end(), ir) != vec_r.end()) {
+                    --i;
+                    continue;
+                }
+                vec_r.push_back(ir);
+            }
+
+            assert(vec_r[0] >= 0);
+            assert(vec_r[1] >= 0);
+
+            // Make a new interenal node
+            SCNode* intNodeA = new SCNode();
+            vec_trashcan_SCNODEp.push_back(intNodeA);
+
+            intNodeA->name = "intX";
+
+            // Add the new internal node in nodelist of the node
+            sctree->nodelist.push_back(intNodeA);
+
+
+            // dangle two randomlly chosen children as children of the new
+            // internal node
+            node->children[vec_r[0]]->parent = intNodeA;
+            node->children[vec_r[1]]->parent = intNodeA;
+            intNodeA->children.push_back(node->children[vec_r[0]]);
+            intNodeA->children.push_back(node->children[vec_r[1]]);
+
+            // remove the moved children from the nodelist in the node
+            node->children[vec_r[0]] = NULL;
+            node->children[vec_r[1]] = NULL;
+
+            assert(intNodeA->NumChildren() == 2);
+
+            assert(intNodeA->children[0]->parent == intNodeA);
+            assert(intNodeA->children[1]->parent == intNodeA);
+
+            // update the original node
+            // clear the original children info
+            assert(node->NumChildren() == numChildren-2);
+            assert(intNodeA != NULL);
+
+            vector<SCNode*> vec_temp = node->children;
+            vec_temp.push_back(intNodeA);
+
+            node->children.clear();
+
+            for (unsigned j=0; j<vec_temp.size(); ++j) {
+                if (vec_temp[j] != NULL) node->children.push_back(vec_temp[j]);
+            }
+
+            // update the new internal nodes
+            intNodeA->parent = node;
+        }
+
+        else if (numChildren > 3) {
+            vector<int> vec_r;
+            int32 ir;
+
+            for (unsigned i=0; i<2; ++i) {
+                ir = rg.IRandom(0, numChildren-1);
+                if (find(vec_r.begin(), vec_r.end(), ir) != vec_r.end()) {
+                    --i;
+                    continue;
+                }
+                vec_r.push_back(ir);
+            }
+
+            assert(vec_r[0] >= 0);
+            assert(vec_r[1] >= 0);
+
+            SCNode* intNodeA = new SCNode();
+            SCNode* intNodeB = new SCNode();
+
+            vec_trashcan_SCNODEp.push_back(intNodeA);
+            vec_trashcan_SCNODEp.push_back(intNodeB);
+
+            intNodeA->name = "intNodeA";
+            intNodeB->name = "intNodeB";
+//          intNodeA->SetDistance(0.123456);
+//          intNodeA->SetDistance(0.123456);
+            sctree->nodelist.push_back(intNodeA);
+            sctree->nodelist.push_back(intNodeB);
+
+
+            // update the children
+            // dangle 2 picked children as intNodeA's children
+            node->children[vec_r[0]]->parent = intNodeA;
+            node->children[vec_r[1]]->parent = intNodeA;
+
+            intNodeA->children.push_back(node->children[vec_r[0]]);
+            intNodeA->children.push_back(node->children[vec_r[1]]);
+
+            assert(intNodeA->NumChildren() == 2);
+
+            // dangle the other nodes as intNodeB's children
+            for (unsigned i=0; i<numChildren; ++i) {
+                if (i != vec_r[0] && i != vec_r[1]) {
+                    node->children[i]->parent = intNodeB;
+                    intNodeB->children.push_back(node->children[i]);
+                }
+            }
+
+            assert(intNodeB->NumChildren() == numChildren-2);
+
+            // update the original node
+            // clear the original children info
+            assert(node->NumChildren() == numChildren);
+            node->ClearChildren();
+            assert(node->NumChildren() == 0);
+            assert(intNodeA != NULL);
+            assert(intNodeB != NULL);
+
+            node->children[0] = intNodeA;
+            node->children[1] = intNodeB;
+            assert(node->NumChildren() == 2);
+            assert(node->children[0] != NULL);
+            assert(node->children[1] != NULL);
+
+            // update the new internal nodes
+            intNodeA->parent = node;
+            intNodeB->parent = node;
+        }
+    }
+}
+
+
+void
+dfs_check_multifur(
+    SCNode* node,
+    unsigned &intMultifur)
+{
+    if (node == NULL) return;
+
+    unsigned numChildren = node->NumChildren();
+    if (numChildren > 2) {
+        intMultifur++;
+        return;
+    }
+
+    if (numChildren != 0) {
+        for (unsigned i=0; i<numChildren; ++i) {
+            dfs_check_multifur(node->children[i], intMultifur);
+        }
+    }
+}
+
+
+// IMPLICIT BP
+BitSet
+dfs_collect_bp(
+    NEWICKNODE* startNode,
+    LabelMap &lm,
+    vector<BitSet> & vec_bs_resolved)
+{
+    if (startNode->Nchildren == 0) {
+        // leaf node
+        BitSet bs(NUM_TAXA);
+        string temp(startNode->label);
+        unsigned idx = lm[temp];
+        bs[idx] = true;
+
+        return bs;
+    } else {
+        // At this point, we find a bipartition.
+        // Thus, OR the bitstrings and make a bit string for the bipartition
+        BitSet bs(NUM_TAXA);
+
+        for (int i=0; i<startNode->Nchildren; ++i) {
+            BitSet ebs = dfs_collect_bp(startNode->child[i], lm, vec_bs_resolved);
+            bs |= ebs;
+        }
+
+        if (find(vec_bs_resolved.begin(), vec_bs_resolved.end(), bs) == vec_bs_resolved.end()) {
+            vec_bs_resolved.push_back(bs);
+        }
+
+
+        return bs;
+    }
+}
+
+
+
+// IMPLICIT BP
+BitSet*
+dfs_hashcs_SC_nbit_wo_T2_NEWICK(
+    NEWICKNODE* startNode,
+    LabelMap &lm,
+//  HashMap &vvec_hashcs,
+//  unsigned treeIdx,
+//  unsigned long m1,
+//  unsigned long m2,
+    vector<BitSet> & vec_bs)
+{
+    if (startNode->Nchildren == 0) {
+        // leaf node
+        BitSet* bs = new BitSet(NUM_TAXA);
+        string temp(startNode->label);
+        unsigned idx = lm[temp];
+        (*bs)[idx] = true;
+
+        // Implicit BPs /////////////////////////
+        // Set the hash values for each leaf node.
+//      startNode->hv1 = vvec_hashcs._HF.getA1(idx);
+//      startNode->hv2 = vvec_hashcs._HF.getA2(idx);
+
+        return bs;
+    } else {
+        // At this point, we find a bipartition.
+        // Thus, OR the bitstrings and make a bit string for the bipartition
+        BitSet* bs = new BitSet(NUM_TAXA);
+
+        assert(startNode->Nchildren < 3);
+
+        for (int i=0; i<startNode->Nchildren; ++i) {
+//          BitSet* ebs = dfs_hashcs_SC_nbit_wo_T2_NEWICK(startNode->child[i], lm, vvec_hashcs, treeIdx, m1, m2, vec_bs);
+            BitSet* ebs = dfs_hashcs_SC_nbit_wo_T2_NEWICK(startNode->child[i], lm, vec_bs);
+            *bs |= *ebs;
+            if (ebs) {
+                delete ebs;
+                ebs = NULL;
+            }
+        }
+//      cout << "weight=" << startNode->weight << endl;
+
+        // Implicit BPs ////////////
+        // After an internal node is found, compute the hv1 and hv2
+//      unsigned long long temp1=0;
+//      unsigned long long temp2=0;
+//
+//      for(int i=0; i<startNode->Nchildren; ++i)
+//      {
+//          temp1 += startNode->child[i]->hv1;
+//          temp2 += startNode->child[i]->hv2;
+//      }
+//
+//      startNode->hv1 = temp1 % m1;
+//      startNode->hv2 = temp2 % m2;
+//
+
+        vec_bs.push_back(*bs);
+
+        return bs;
+    }
+}
+
+
+
+string itos(int i)  // convert int to string
+{
+    stringstream s;
+    s << i;
+    return s.str();
+}
+
+
+int main(int argc, char** argv)
+{
+    string outfilename;
+    float ResolutionRate = 0.0;
+    unsigned numOutputTrees = 0;
+
+    // TCLAP
+    try {
+        // Define the command line object.
+        string  helpMsg  = "unresolverstr\n";
+
+        helpMsg += "Input file: \n";
+        helpMsg += "   The current version of HashCS only supports the Newick format.\n";
+
+        helpMsg += "Example of Newick tree: \n";
+        helpMsg += "   (('Chimp':0.052625,'Human':0.042375):0.007875,'Gorilla':0.060125,\n";
+        helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
+        helpMsg += "   ('Chimp':0.052625,('Human':0.042375,'Gorilla':0.060125):0.007875,\n";
+        helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
+
+        helpMsg += "File option: (default = outtree)\n";
+        helpMsg += "   -o <export-file-name>, specify a file name to save the result tree.\n";
+
+        helpMsg += "Examples: \n";
+        helpMsg += "  unresolverstr foo.tre 0.75 1000\n";
+        helpMsg += "  unresolverstr foo.tre 0.75 1000\n";
+
+        TCLAP::CmdLine cmd(helpMsg, ' ', "0.9");
+
+        TCLAP::UnlabeledValueArg<string>  fnameArg( "name", "file name", true, "intree", "Input tree file name"  );
+        cmd.add( fnameArg );
+
+//    TCLAP::UnlabeledValueArg<int>  numtreeArg( "numtree", "number of trees", true, 2, "Number of trees"  );
+//    cmd.add( numtreeArg );
+
+        TCLAP::UnlabeledValueArg<float>  rateArg( "rate", "resolution rate", true, 0.0, "Resolution rate"  );
+        cmd.add( rateArg );
+
+        TCLAP::UnlabeledValueArg<unsigned>  numoutTreeArg( "numTree", "number of output trees", true, 1, "Number of output trees"  );
+        cmd.add( numoutTreeArg );
+
+        TCLAP::ValueArg<int> cArg("c", "cvalue", "c value", false, 1000, "c value");
+        cmd.add( cArg );
+
+        TCLAP::ValueArg<string> outfileArg("o", "outfile", "Output file name", false, "outtree", "Output file name");
+        cmd.add( outfileArg );
+
+        cmd.parse( argc, argv );
+
+
+        //  NUM_TREES = atoi(argv[2]);
+//      NUM_TREES = 1;
+        ResolutionRate = rateArg.getValue();
+        numOutputTrees = numoutTreeArg.getValue();
+
+//      if (NUM_TREES == 0)
+//      {
+//          string strFileLine;
+//          unsigned long ulLineCount;
+//          ulLineCount = 0;
+//
+//          ifstream infile(argv[1]);
+//
+//          if (infile){
+//              while (getline(infile, strFileLine))
+//              {
+//              ulLineCount++;
+//              }
+//          }
+//          cout << "*** Number of trees in the input file: " << ulLineCount << endl;
+//          NUM_TREES = ulLineCount;
+//
+//          infile.close();
+//      }
+
+        if (cArg.getValue()) C = cArg.getValue();
+
+        outfilename = outfileArg.getValue();
+
+    } catch (TCLAP::ArgException &e) { // catch any exceptions
+        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
+    }
+
+    /*********************************************************************************/
+    cout << "*** Reading a tree file and parsing the tree for taxon label collection ***\n";
+    /*********************************************************************************/
+    NEWICKTREE *newickTree;
+    int err;
+    FILE *fp;
+    fp = fopen(argv[1], "r");
+    if(!fp) {
+        cout << "ERROR: file open error\n";
+        exit(0);
+    }
+
+    newickTree = loadnewicktree2(fp, &err);
+    if(!newickTree) {
+        switch(err) {
+        case -1:
+            printf("Out of memory\n");
+            break;
+        case -2:
+            printf("parse error\n");
+            break;
+        case -3:
+            printf("Can't load file\n");
+            break;
+        default:
+            printf("Error %d\n", err);
+        }
+    }
+
+    /**************************************************/
+    cout << "\n*** Collecting the taxon labels ***\n";
+    /**************************************************/
+    LabelMap lm;
+
+    try {
+        GetTaxaLabels2(newickTree->root, lm);
+    } catch (LabelMap::AlreadyPushedEx ex) {
+        cerr << "ERROR: The label '" << ex.label << "' appeard twice in " << endl;
+        exit(2);
+    }
+    NUM_TAXA = lm.size();
+    cout << "    Number of taxa = " << NUM_TAXA << endl;
+    killnewicktree(newickTree);
+
+    fclose(fp);
+
+
+
+    /*******************************************************************/
+    cout << "\n*** Reading tree file and collecting bipartitions ***\n";
+    /*******************************************************************/
+
+//  treeFile.open(argv[1]);
+//////  HashMap vvec_hashcs; // Class HashRFMap for HashConsense
+//////
+//////  // Init hash function class
+//////  unsigned long M1=0;
+//////  unsigned long M2=0;
+//////
+//////  vvec_hashcs.uhashfunc_init(NUM_TREES, NUM_TAXA, HASHTABLE_FACTOR, C);
+//////  M1 = vvec_hashcs._HF.getM1();
+//////  M2 = vvec_hashcs._HF.getM2();
+//////  vvec_hashcs._hashtab_hashCS.resize(M1); // Increase the size of hash table upto m1
+
+    vector<BitSet> vec_bs; // to collect sc bipartitions
+
+    fp = fopen(argv[1], "r");
+    if(!fp) {
+        cout << "ERROR: file open error\n";
+        exit(0);
+    }
+
+//  for (unsigned treeIdx=0; treeIdx<NUM_TREES; ++treeIdx)
+//  {
+    newickTree = loadnewicktree2(fp, &err);
+    if(!newickTree) {
+        switch(err) {
+        case -1:
+            printf("Out of memory\n");
+            break;
+        case -2:
+            printf("parse error\n");
+            break;
+        case -3:
+            printf("Can't load file\n");
+            break;
+        default:
+            printf("Error %d\n", err);
+        }
+    } else {
+//          dfs_hashcs_SC_nbit_wo_T2_NEWICK(newickTree->root, lm, vvec_hashcs, treeIdx, M1, M2, vec_bs);
+        dfs_hashcs_SC_nbit_wo_T2_NEWICK(newickTree->root, lm, vec_bs);
+        killnewicktree(newickTree);
+    }
+//  }
+
+    unsigned total_BPs = vec_bs.size()-2;
+    cout << "    vec_bs.size() = " << vec_bs.size() << endl;
+    fclose(fp);
+
+
+    // Remove two biaprtitions unnecessary
+    vec_bs.erase(vec_bs.end());
+    vec_bs.erase(vec_bs.end());
+
+
+    int32 seed = time(0);                // random seed
+    TRandomMersenne rg(seed);            // make instance of random number generator
+
+
+    vector<int> vec_random;
+//  int32 ir;                            // random integer number
+
+    for (unsigned i=0; i<total_BPs; ++i) {
+        vec_random.push_back(i);
+    }
+
+    ////
+    random_shuffle(vec_random.begin(), vec_random.end());
+    ////
+
+//////  for (unsigned i=0; i<total_BPs; ++i)
+//////  {
+//////      ir = rg.IRandom(0, total_BPs-1);
+//////      if (find(vec_random.begin(), vec_random.end(), ir) != vec_random.end())
+//////      {
+//////          --i;
+//////          continue;
+//////      }
+//////      vec_random.push_back(ir);
+//////  }
+
+//  cout << "    num of random numbers=" << vec_random.size() << endl;
+//  for (unsigned i=0; i<vec_random.size(); ++i)
+//  {
+//      cout << "vec_random[i]=" << vec_random[i] << endl;
+//  }
+
+    cout << "Rate=" << ResolutionRate << endl;
+    cout << "Before round=" << total_BPs * ResolutionRate << endl;
+    cout << "After  round=" << round(total_BPs * ResolutionRate) << endl;
+
+    unsigned numBPLimit = int(round(total_BPs * ResolutionRate));
+
+
+    /**************************************************/
+    // Select r% (numBPLimit) bipartitoins from vec_bs
+    /**************************************************/
+    vector<BitSet> vec_bs_in;
+//  vector<BitSet> vec_bs_out;
+
+    for (unsigned i=0; i<vec_bs.size(); ++i) {
+        if (vec_random[i] < numBPLimit)
+            vec_bs_in.push_back(vec_bs[i]);
+    }
+
+//  for (unsigned x=0; x<vec_bs.size(); x++)
+//      cout << vec_bs[x] << endl;
+//  cout << endl;
+//  for (unsigned x=0; x<vec_bs_in.size(); x++)
+//      cout << vec_bs_in[x] << endl;
+
+    unsigned remaining_BPs = vec_bs.size() - vec_bs_in.size();
+    cout << "remaining BPs=" << remaining_BPs << endl;
+
+
+    ///////////////
+    vec_bs.clear();
+    ///////////////
+
+
+    cout << "# of bipartitoins considered (in) = " << vec_bs_in.size() << endl;
+
+
+
+////////    /***********************************************/
+////////    // vec_random_str_in <- random numbers 51%~100%
+////////    /***********************************************/
+////////    vector<int> vec_random_str_in;
+////////    for (unsigned i=0; i<vec_bs_in.size(); ++i)
+////////    {
+////////        int ir;
+//////////      ir = rg.IRandom(int(round(numOutputTrees*0.95)), numOutputTrees);
+////////    ir = rg.IRandom(int(round(numOutputTrees*0.5))+1, numOutputTrees);
+////////        vec_random_str_in.push_back(ir);
+////////    }
+//////////  for (unsigned t=0; t<vec_random_str_in.size(); t++)
+//////////      cout << "vec_random_str_in[t]=" << vec_random_str_in[t] << endl;
+////////
+////////
+////////
+////////    /************************************************************/
+////////    // map_random_str_in
+////////    // <- random numbers for selecting tree indices to distribute
+////////    // bipartitions in vec_bs_in.
+////////    /************************************************************/
+////////    map<int, vector<int> > map_random_str_in;
+////////
+////////    for (unsigned i=0; i<vec_random_str_in.size(); ++i)
+////////    {
+////////            vector<int> vec_random_str2;
+////////
+////////            for (unsigned j=0; j<numOutputTrees; ++j)
+////////            {
+////////                vec_random_str2.push_back(j+1);
+////////            }
+////////
+////////            ////
+////////            random_shuffle(vec_random_str2.begin(), vec_random_str2.end());
+////////            ////
+////////
+////////////////            for (unsigned j=0; j<numOutputTrees; ++j)
+////////////////            {
+////////////////                int32 ir;
+////////////////            ir = rg.IRandom(1, numOutputTrees);
+////////////////            if (find(vec_random_str2.begin(), vec_random_str2.end(), ir) != vec_random_str2.end())
+////////////////                {
+////////////////                    --j;
+////////////////                    continue;
+////////////////                }
+////////////////                vec_random_str2.push_back(ir);
+////////////////            }
+////////            map_random_str_in.insert( pair<int, vector<int> >(i, vec_random_str2) );
+//////////      }
+////////    }
+////////    cout <<  "map_random_str_in.size()=" << map_random_str_in.size() << endl;
+////////
+//////////  map<int, vector<int> >::iterator iter;
+//////////  for (iter=map_random_str_in.begin(); iter!=map_random_str_in.end(); ++iter)
+//////////  {
+//////////      cout << iter->first << " " << iter->second.size() << " : ";
+//////////      for (unsigned i=0; i<iter->second.size(); ++i)
+//////////          cout << iter->second[i] << " ";
+//////////      cout << endl;
+//////////  }
+
+
+
+////////    /**********************************************/
+////////    // vec_random_str_out <- random numbers 0%~50%
+////////    /**********************************************/
+////////    vector<int> vec_random_str_out;
+////////
+////////    for (unsigned i=0; i<remaining_BPs; ++i)
+////////    {
+////////        int ir;
+//////////      ir = rg.IRandom(int(round(numOutputTrees*0.45)), int(round(numOutputTrees*0.5)));
+////////    ir = rg.IRandom(0, int(round(numOutputTrees*0.5)));
+////////        vec_random_str_out.push_back(ir);
+////////    }
+//////////  for (unsigned t=0; t<vec_random_str_out.size(); t++)
+//////////      cout << "vec_random_str_out[t]=" << vec_random_str_out[t] << endl;
+////////
+////////    /*************************************************************/
+////////    // map_random_str_out
+////////    // <- random numbers for selecting tree indices to distribute
+////////    // bipartitions in vec_bs_out
+////////    /*************************************************************/
+////////    map<int, vector<int> > map_random_str_out;
+////////
+////////    for (unsigned i=0; i<vec_random_str_out.size(); ++i)
+////////    {
+////////            vector<int> vec_random_str2;
+////////
+////////            for (unsigned j=0; j<numOutputTrees; ++j)
+////////            {
+////////                vec_random_str2.push_back(j+1);
+////////            }
+////////
+////////            ////
+////////            random_shuffle(vec_random_str2.begin(), vec_random_str2.end());
+////////            ////
+////////
+////////////////            for (unsigned j=0; j<numOutputTrees; ++j)
+////////////////            {
+////////////////                int32 ir;
+////////////////            ir = rg.IRandom(1, numOutputTrees);
+////////////////            if (find(vec_random_str2.begin(), vec_random_str2.end(), ir) != vec_random_str2.end())
+////////////////                {
+////////////////                    --j;
+////////////////                    continue;
+////////////////                }
+////////////////                vec_random_str2.push_back(ir);
+////////////////            }
+////////
+////////            map_random_str_out.insert( pair<int, vector<int> >(i, vec_random_str2) );
+////////    }
+////////    cout <<  "map_random_str_out.size()=" << map_random_str_out.size() << endl;
+
+//  map<int, vector<int> >::iterator i2ter;
+//  for (iter=map_random_str_out.begin(); iter!=map_random_str_out.end(); ++iter)
+//  {
+//      cout << iter->first << " " << iter->second.size() << " : ";
+//      for (unsigned i=0; i<iter->second.size(); ++i)
+//          cout << iter->second[i] << " ";
+//      cout << endl;
+//  }
+
+    multimap<unsigned, unsigned, greater<unsigned> > mmap_cluster;
+    vector<vector<SCNode*> > vvec_distinctClusters2;
+    ofstream fout;
+
+    if (outfilename != "outtree")
+        fout.open(outfilename.c_str());
+    else
+        fout.open("outtree");
+
+    int32 seed2 = time(0);
+    TRandomMersenne rg2(seed2);
+
+    vector<SCNode*> vec_trashcan_SCNODEp;
+    vector<string> vec_trashcan_STRING;
+    vector<BitSet> vec_bs_selected;
+    vector<BitSet> vec_bs_newly_resolved;
+
+    vector< vector<int> > vvec_assigned_BID(numOutputTrees);
+    map<unsigned, vector<unsigned> > map_assigned_BID;
+    map<unsigned, vector<unsigned> >::iterator mItr;
+
+    ////////////////// 1 ///////////////////////////////////
+    //
+    // Collect r% strict biaprtition only
+    //
+    ////////////////// 1 ///////////////////////////////////
+    for (unsigned numOut=0; numOut<numOutputTrees; ++numOut) {
+        cout << numOut << endl;
+
+        for (unsigned i=0; i<vec_bs_in.size(); ++i) {
+            map_assigned_BID[numOut].push_back(i);
+////////            if (vec_random_str_in[i] == numOutputTrees)
+////////            {
+////////                    map_assigned_BID[numOut].push_back(i);
+////////            }
+////////            else
+////////            {
+////////                if (map_random_str_in[i][numOut] <= vec_random_str_in[i])
+////////                {
+////////                    map_assigned_BID[numOut].push_back(i);
+////////                }
+////////            }
+        }
+    }
+//  for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+//  {
+//      cout << mItr->first << "   ";
+//      for (int i=0; i<mItr->second.size(); ++i)
+//          cout << mItr->second[i] << " ";
+//      cout << endl;
+//  }
+
+
+    ////////////////// 2 ///////////////////////////////////
+    //
+    // Construct and resolve each tree to find new;y
+    // resolved bipartitions
+    // If there is no conflict between the newly resolved
+    // bipartition and the already collected BPs in vec_bs_in
+    // then insert the bipartition in the BP list of the tree
+    //
+    ////////////////// 2 ///////////////////////////////////
+
+
+////////    for (unsigned i=0; i<numOutputTrees; ++i)
+////////    {
+////////        int32 ir2 = rg.IRandom(0, numOutputTrees-1);
+////////        if (find(temp_rand.begin(), temp_rand.end(), ir2) != temp_rand.end())
+////////        {
+////////            --i;
+////////            continue;
+////////        }
+////////        temp_rand.push_back(ir2);
+////////    }
+
+//  int numFullList=0;
+//  int iter=0;
+//  while (numFullList < numOutputTrees/2 and itera=100)
+//  {
+
+//      for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+//      {
+//          if (mItr->second.size() == NUM_TAXA-3)
+//          {
+//              numFullList++;
+//          }
+//      }
+
+    /*******************************************************************************/
+    // Collect actual bipartitoins and make cluster data structure one tree by one.
+    // For each cluster information, a multifurcating tree (scTree) is constructed.
+    // And them the tree will be resolved one by one and the newly found (resolved)
+    // bipartitions are distributed to the other trees.
+    /*******************************************************************************/
+
+    BitSet bs(NUM_TAXA);
+    for (unsigned i=0; i<NUM_TAXA; ++i) {
+        bs[i]=true;
+    }
+
+    for (unsigned numOut=0; numOut<numOutputTrees; ++numOut) {
+        cout << numOut << endl;
+
+        // Bipartition with all '1's
+        // Need for constrcuting a consensus tree
+        vec_bs_selected.push_back(bs);
+
+        // strict bipartition
+        for (unsigned i=0; i<map_assigned_BID[numOut].size(); ++i) {
+//          cout << map_assigned_BID[numOut][i] << endl;
+//          cout << vec_bs_in[map_assigned_BID[numOut][i]] << endl;
+            vec_bs_selected.push_back(vec_bs_in[map_assigned_BID[numOut][i]]);
+
+        }
+//      cout << "    2vec_bs_selected.size()= " << vec_bs_selected.size() << endl;
+
+//      for (unsigned x=0; x<vec_bs_selected.size(); ++x)
+//          cout << vec_bs_selected[x] << endl;
+
+        // Clear new resolved bipartition
+        vec_bs_newly_resolved.clear();
+
+
+
+        for (unsigned i=0; i<vec_bs_selected.size(); ++i) {
+            vector<SCNode*> vec_nodes2;
+            for (unsigned j=0; j<NUM_TAXA; ++j) {
+                if ((vec_bs_selected[i])[j]) {
+                    SCNode* aNode = new SCNode();
+                    aNode->name = lm.name(j);
+//                  aNode->SetDistance(0.123456);
+                    vec_nodes2.push_back(aNode);
+                    vec_trashcan_SCNODEp.push_back(aNode);
+                }
+            }
+            vvec_distinctClusters2.push_back(vec_nodes2);
+        }
+
+        /*************************************************************************/
+        // Insert the cluster into a multi-map for sorting in descending order of
+        // the number of '1's.
+        // This is to construct tree using the bipartitions
+        /*************************************************************************/
+        for (unsigned i=0; i<vvec_distinctClusters2.size(); ++i) {
+            mmap_cluster.insert(multimap<unsigned,unsigned>::value_type(vvec_distinctClusters2[i].size(), i));
+        }
+
+        //////////////////////////////////////////////////////////////////////////////
+        // 09.19.2007
+        // Construct SC tree
+        //////////////////////////////////////////////////////////////////////////////
+        multimap<unsigned,unsigned>::iterator itr;
+        SCTree *scTree = new SCTree();
+        bool addedRoot=false;
+        unsigned intNodeNum = 0;
+
+        for (itr=mmap_cluster.begin(); itr!=mmap_cluster.end(); ++itr) {
+            if (!addedRoot) {
+                // The first cluster has all the taxa.
+                // This constructs a star tree with all the taxa.
+                // 1. Dangle all the taxa as root's children by adjusting parent link.
+                // 2. Push all the node* in the root's children
+                // 3. Push all the nodes in the tree's nodelist.
+                // 4. Push all the nodes' parent in the tree's parentlist.
+
+                for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
+                    vvec_distinctClusters2[itr->second][i]->parent = scTree->root;
+                    scTree->root->children.push_back(vvec_distinctClusters2[itr->second][i]);
+                    scTree->nodelist.push_back(vvec_distinctClusters2[itr->second][i]);
+                    assert(scTree->nodelist[0]->name == "root");
+                    scTree->parentlist2.insert(map<string,int>::value_type(vvec_distinctClusters2[itr->second][i]->name, 0));
+                }
+                addedRoot = true;
+            } else {
+                // For the next biggest cluster,
+                // 1. Find node list to move (= vvec_distinctClusters2[itr->second]) and
+                //    Get the parent node of the to-go nodes.
+                // 2. Make an internal node.
+                // 3. Insert the node in the nodelist of the tree and update the parentlist accordingly
+                // 4. Adjust the to-go nodes' parent link.
+                // 5. Adjust the parent node's link to children (delete the moved nodes from children).
+
+
+                // 1. --------------------------------------------------------------------------
+                SCNode* theParent = NULL;
+                theParent = scTree->nodelist[scTree->parentlist2[vvec_distinctClusters2[itr->second][0]->name]];
+
+                assert(theParent != NULL);
+                assert(theParent->name != "");
+
+                // 2. --------------------------------------------------------------------------
+                string newIntNodeName = "int" + itos(intNodeNum);
+                vec_trashcan_STRING.push_back(newIntNodeName);
+
+                SCNode* newIntNode = new SCNode();
+//              newIntNode->SetDistance(0.123456);
+                vec_trashcan_SCNODEp.push_back(newIntNode);
+
+                newIntNode->name = newIntNodeName;
+                newIntNode->parent = theParent;
+
+                // 3. --------------------------------------------------------------------------
+                assert(newIntNodeName.size() != 0);
+                scTree->nodelist.push_back(newIntNode);
+                assert(scTree->nodelist[scTree->nodelist.size()-1]->name == newIntNode->name);
+
+                scTree->parentlist2.insert(map<string, unsigned>::value_type(newIntNodeName, scTree->nodelist.size()-1));
+
+                for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
+                    // 4. --------------------------------------------------------------------------
+                    vvec_distinctClusters2[itr->second][i]->parent = newIntNode;
+
+                    // We have to update parentlist in the tree.
+                    assert(vvec_distinctClusters2[itr->second][i]->parent->name == scTree->nodelist[scTree->nodelist.size()-1]->name);
+
+                    scTree->parentlist2[vvec_distinctClusters2[itr->second][i]->name] = scTree->nodelist.size()-1;
+                    newIntNode->children.push_back(vvec_distinctClusters2[itr->second][i]);
+
+                    // 5. --------------------------------------------------------------------------
+                    // Delete the moved nodes from parent's children.
+                    vector<SCNode*>::iterator itr2;
+
+                    for (itr2 = theParent->children.begin(); itr2 != theParent->children.end(); ++itr2) {
+                        if (vvec_distinctClusters2[itr->second][i]->name == (*itr2)->name) {
+                            theParent->children.erase(itr2);
+                            break;
+                        }
+                    }
+                }
+                theParent->children.push_back(newIntNode);
+                intNodeNum++;
+            }
+//          scTree->DrawOnTerminal();
+        }
+
+//      cout << scTree->GetTreeString() << endl;
+//      fout << scTree->GetTreeString() << endl;
+
+
+        /********************************************************************/
+        // The constructed trees are multifurcating trees. Thus, resolve it.
+        /********************************************************************/
+        unsigned numMultifur=0;
+
+        do {
+            numMultifur=0;
+            dfs_resolve_one(scTree->root, rg2, scTree, vec_trashcan_SCNODEp);
+            dfs_check_multifur(scTree->root, numMultifur);
+        } while (numMultifur != 0);
+
+
+        ofstream fout_resolved;
+        fout_resolved.open("resolved_tree.tre");
+
+        string temptree = scTree->GetTreeString();
+
+//      fout << scTree->GetTreeString();
+        fout_resolved << temptree;
+        fout_resolved.close();
+
+//      fout << temptree;
+//      fout << endl;
+
+        /********************************************************/
+        // Read the fully resolved tree and collect bipartitions
+        /********************************************************/
+        fp = fopen("resolved_tree.tre", "r");
+        if(!fp) {
+            cout << "ERROR: file open error\n";
+            exit(0);
+        }
+
+        NEWICKTREE *newickTree = loadnewicktree2(fp, &err);
+        if(!newickTree) {
+            switch(err) {
+            case -1:
+                printf("Out of memory\n");
+                break;
+            case -2:
+                printf("parse error\n");
+                break;
+            case -3:
+                printf("Can't load file\n");
+                break;
+            default:
+                printf("Error %d\n", err);
+            }
+        } else {
+            dfs_collect_bp(newickTree->root, lm, vec_bs_newly_resolved);
+            killnewicktree(newickTree);
+        }
+//      killnewicktree(newickTree);
+        fclose(fp);
+
+
+        vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
+        vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
+//      sort(vec_bs_newly_resolved.rbegin(), vec_bs_newly_resolved.rend());
+
+
+//      cout << "    2vec_bs_newly_resolved.size()= " << vec_bs_newly_resolved.size() << endl;
+//      for (unsigned x=0; x<vec_bs_newly_resolved.size(); ++x)
+//          cout << vec_bs_newly_resolved[x] << endl;
+
+
+//      int32 ir = rg.IRandom(0, vec_bs_newly_resolved.size()-1);
+//      cout << "ir=" << ir << endl;
+//
+//      vec_bs_in.push_back(vec_bs_newly_resolved[ir]);
+//      cout << "vec_bs_in.size()=" << vec_bs_in.size() << endl;
+//
+////        vector<int> temp_rand;
+////        for (unsigned i=0; i<numOutputTrees; ++i)
+////        {
+////            int32 ir2 = rg.IRandom(0, numOutputTrees-1);
+////            if (find(temp_rand.begin(), temp_rand.end(), ir2) != temp_rand.end())
+////            {
+////                --i;
+////                continue;
+////            }
+////            temp_rand.push_back(ir2);
+////        }
+////        for (unsigned i=0; i<numOutputTrees; ++i)
+////            cout << temp_rand[i] << " ";
+////        cout << endl;
+
+
+        /*******************************************************/
+        // Select the newly resolved bipartitions and distribute
+        // the bipartitions to other trees.
+        /*******************************************************/
+
+        vector<int> temp_rand;
+
+        for (unsigned j=0; j<numOutputTrees; ++j) {
+            temp_rand.push_back(j+1);
+        }
+
+        ////
+        random_shuffle(temp_rand.begin(), temp_rand.end());
+        ////
+
+        int newlyInserted=0;
+        for (unsigned i=0; i<vec_bs_newly_resolved.size(); ++i) {
+            if (find(vec_bs_in.begin(), vec_bs_in.end(), vec_bs_newly_resolved[i]) == vec_bs_in.end()) {
+//              cout << "1vec_bs_in.size()=" << vec_bs_in.size() << endl;
+//              cout << "vec_bs_newly_resolved[i]=" << vec_bs_newly_resolved[i] << endl;
+                vec_bs_in.push_back(vec_bs_newly_resolved[i]);
+//              cout << "2vec_bs_in.size()=" << vec_bs_in.size() << endl;
+
+                for (unsigned k=0; k<numOutputTrees; ++k) {
+//                  if (temp_rand[k] < numOutputTrees/2)
+                    unsigned numTreeToDitribute = 0;
+//                  if (ResolutionRate > 0.5)
+//                  {
+//                      numTreeToDitribute = int(round(numOutputTrees*0.5));
+//                  }
+//                  else
+//                  {
+                    numTreeToDitribute = int(round(numOutputTrees*ResolutionRate));
+//                  }
+
+                    if (temp_rand[k] < numTreeToDitribute) {
+                        if (map_assigned_BID[k].size() != NUM_TAXA-3) {
+                            assert(find(map_assigned_BID[k].begin(), map_assigned_BID[k].end(), vec_bs_in.size()-1) == map_assigned_BID[k].end());
+//                          map_assigned_BID[k].push_back(vec_bs_in.size()-1);
+
+                            // 1. AND with BPs in the vec_bs_in
+                            // 2. If there is two '1's, insert
+                            bool bCheck = true;
+
+                            for (unsigned m=0; m<map_assigned_BID[k].size(); ++m) {
+                                // Check conflict in bipartitions
+                                BitSet temp_bs(NUM_TAXA);
+//                              cout << vec_bs_in[map_assigned_BID[k][m]] << " " <<  vec_bs_newly_resolved[i] <<endl;
+                                temp_bs = vec_bs_in[map_assigned_BID[k][m]];
+                                temp_bs &= vec_bs_newly_resolved[i];
+//                              cout << temp_bs << endl;
+                                temp_bs.count_ones_zeros();
+//                              cout << "num_ones=" << temp_bs.num_ones() << endl;
+                                if (temp_bs.num_ones() < 2) {
+                                    bCheck = false;
+                                    break;
+                                } else {
+//                                  cout << "newly inserted\n";
+//                                  assert(map_assigned_BID[k].size() != NUM_TAXA-3);
+                                    if (map_assigned_BID[k].size() != NUM_TAXA-3 and find(map_assigned_BID[k].begin(), map_assigned_BID[k].end(), vec_bs_in.size()-1) == map_assigned_BID[k].end()) {
+//                                      map_assigned_BID[k].push_back(vec_bs_in.size()-1);
+                                        newlyInserted++;
+                                    } else break;
+                                }
+                            }
+//                          if (bCheck)
+//                          {
+//                              cout << "newly inserted\n";
+//                              map_assigned_BID[k].push_back(vec_bs_in.size()-1);
+//                              newlyInserted++;
+//                          }
+//                          cout << endl;
+                        }
+                    }
+                }
+//              for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+//              {
+//                  cout << mItr->first << "    ";
+//                  for (int i=0; i<mItr->second.size(); ++i)
+//                  {
+//                      assert(mItr->second.size() <= NUM_TAXA-3);
+//                      cout << mItr->second[i] << " ";
+//                  }
+//                  cout << endl;
+//              }
+            }
+        }
+//      cout << "newlyInserted=" << newlyInserted << endl;
+
+        /****************************************/
+
+        vec_bs_selected.clear();
+        mmap_cluster.clear();
+        vvec_distinctClusters2.clear();
+
+        for (unsigned ii=0; ii<vec_trashcan_SCNODEp.size(); ++ii) {
+            if (vec_trashcan_SCNODEp[ii]) {
+                delete vec_trashcan_SCNODEp[ii];
+            }
+            vec_trashcan_SCNODEp[ii] = NULL;
+        }
+        vec_trashcan_SCNODEp.clear();
+
+        if (vec_trashcan_STRING.size()) vec_trashcan_STRING.clear();
+
+    }
+
+
+//  for (unsigned i=0; i<numOutputTrees; ++i)
+//      cout << temp_rand[i] << " ";
+//  cout << endl;
+//
+//  for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+//  {
+//      cout << mItr->first << "    ";
+//      for (int i=0; i<mItr->second.size(); ++i)
+//      {
+//          assert(mItr->second.size() <= NUM_TAXA-3);
+//          cout << mItr->second[i] << " ";
+//      }
+//      cout << endl;
+//  }
+
+//  temp_rand.clear();
+//  for (unsigned i=0; i<numOutputTrees; ++i)
+//  {
+//      int32 ir2 = rg.IRandom(0, numOutputTrees-1);
+//      if (find(temp_rand.begin(), temp_rand.end(), ir2) != temp_rand.end())
+//      {
+//          --i;
+//          continue;
+//      }
+//      temp_rand.push_back(ir2);
+//  }
+
+//  }
+
+
+//  vector<int> vec_fullListIndex;
+//  int fullListIndex=0;
+//  for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+//  {
+//      if (mItr->second.size() != NUM_TAXA-3)
+//      {
+//          fullListIndex++;
+//          continue;
+//      }
+//      else
+//      {
+//          vec_fullListIndex.push_back(fullListIndex);
+//          fullListIndex++;
+//      }
+//  }
+//  cout << "vec_fullListIndex.size()=" << vec_fullListIndex.size() << endl;
+//  for (unsigned i=0; i<vec_fullListIndex.size(); ++i)
+//      cout << vec_fullListIndex[i] << " ";
+//  cout << endl;
+
+////    int maxFullList=0;
+////    int index=0;
+////    int maxFullListIndex=0;
+////    for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+////    {
+////        if (mItr->second.size() > maxFullList)
+////        {
+////            maxFullList = mItr->second.size();
+////            maxFullListIndex = index;
+////        }
+////        index++;
+////    }
+////    cout << "maxFullListIndex=" << maxFullListIndex << endl;
+////
+////
+////    for (mItr=map_assigned_BID.begin(); mItr!=map_assigned_BID.end(); ++mItr)
+////    {
+////        cout << mItr->first << "    ";
+////        if (mItr->second.size() < NUM_TAXA-3)
+////        {
+////            cout << "no" << endl;
+////            unsigned remaining = NUM_TAXA-3-mItr->second.size();
+////            cout << "remaining=" << remaining << endl;
+////
+////        }
+////
+////
+////
+//////      for (int i=0; i<mItr->second.size(); ++i)
+//////      {
+//////          assert(mItr->second.size() <= NUM_TAXA-3);
+//////          cout << mItr->second[i] << " ";
+//////      }
+////        cout << endl;
+////    }
+
+
+    ////////////////// 3 ///////////////////////////////////
+    //
+    // Now we have complete set of BP BIDs for each tree
+    // in map_assigned_BID[][]
+    //
+    ////////////////// 3 ///////////////////////////////////
+    for (unsigned numOut=0; numOut<numOutputTrees; ++numOut) {
+        cout << numOut << endl;
+
+        vec_bs_selected.clear();
+        vec_bs_selected.push_back(bs);
+
+        // strict bipartition
+        for (unsigned i=0; i<map_assigned_BID[numOut].size(); ++i) {
+            vec_bs_selected.push_back(vec_bs_in[map_assigned_BID[numOut][i]]);
+        }
+
+        for (unsigned i=0; i<vec_bs_selected.size(); ++i) {
+            vector<SCNode*> vec_nodes2;
+            for (unsigned j=0; j<NUM_TAXA; ++j) {
+                if ((vec_bs_selected[i])[j]) {
+                    SCNode* aNode = new SCNode();
+                    aNode->name = lm.name(j);
+//                  aNode->SetDistance(0.123456);
+                    vec_nodes2.push_back(aNode);
+                    vec_trashcan_SCNODEp.push_back(aNode);
+                }
+            }
+            vvec_distinctClusters2.push_back(vec_nodes2);
+        }
+
+        for (unsigned i=0; i<vvec_distinctClusters2.size(); ++i)
+            mmap_cluster.insert(multimap<unsigned,unsigned>::value_type(vvec_distinctClusters2[i].size(), i));
+
+
+        //////////////////////////////////////////////////////////////////////////////
+        // 09.19.2007
+        // Construct SC tree
+        //////////////////////////////////////////////////////////////////////////////
+        multimap<unsigned,unsigned>::iterator itr;
+        SCTree *scTree = new SCTree();
+        bool addedRoot=false;
+        unsigned intNodeNum = 0;
+
+        for (itr=mmap_cluster.begin(); itr!=mmap_cluster.end(); ++itr) {
+            if (!addedRoot) {
+                // The first cluster has all the taxa.
+                // This constructs a star tree with all the taxa.
+                // 1. Dangle all the taxa as root's children by adjusting parent link.
+                // 2. Push all the node* in the root's children
+                // 3. Push all the nodes in the tree's nodelist.
+                // 4. Push all the nodes' parent in the tree's parentlist.
+
+                for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
+                    vvec_distinctClusters2[itr->second][i]->parent = scTree->root;
+                    scTree->root->children.push_back(vvec_distinctClusters2[itr->second][i]);
+                    scTree->nodelist.push_back(vvec_distinctClusters2[itr->second][i]);
+                    assert(scTree->nodelist[0]->name == "root");
+                    scTree->parentlist2.insert(map<string,int>::value_type(vvec_distinctClusters2[itr->second][i]->name, 0));
+                }
+                addedRoot = true;
+            } else {
+                // For the next biggest cluster,
+                // 1. Find node list to move (= vvec_distinctClusters2[itr->second]) and
+                //    Get the parent node of the to-go nodes.
+                // 2. Make an internal node.
+                // 3. Insert the node in the nodelist of the tree and update the parentlist accordingly
+                // 4. Adjust the to-go nodes' parent link.
+                // 5. Adjust the parent node's link to children (delete the moved nodes from children).
+
+
+                // 1. --------------------------------------------------------------------------
+                SCNode* theParent = NULL;
+                theParent = scTree->nodelist[scTree->parentlist2[vvec_distinctClusters2[itr->second][0]->name]];
+
+                assert(theParent != NULL);
+                assert(theParent->name != "");
+
+                // 2. --------------------------------------------------------------------------
+                string newIntNodeName = "int" + itos(intNodeNum);
+                vec_trashcan_STRING.push_back(newIntNodeName);
+
+                SCNode* newIntNode = new SCNode();
+//              newIntNode->SetDistance(0.123456);
+                vec_trashcan_SCNODEp.push_back(newIntNode);
+
+                newIntNode->name = newIntNodeName;
+                newIntNode->parent = theParent;
+
+                // 3. --------------------------------------------------------------------------
+                assert(newIntNodeName.size() != 0);
+                scTree->nodelist.push_back(newIntNode);
+                assert(scTree->nodelist[scTree->nodelist.size()-1]->name == newIntNode->name);
+
+                scTree->parentlist2.insert(map<string, unsigned>::value_type(newIntNodeName, scTree->nodelist.size()-1));
+
+                for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
+                    // 4. --------------------------------------------------------------------------
+                    vvec_distinctClusters2[itr->second][i]->parent = newIntNode;
+
+                    // We have to update parentlist in the tree.
+                    assert(vvec_distinctClusters2[itr->second][i]->parent->name == scTree->nodelist[scTree->nodelist.size()-1]->name);
+
+                    scTree->parentlist2[vvec_distinctClusters2[itr->second][i]->name] = scTree->nodelist.size()-1;
+                    newIntNode->children.push_back(vvec_distinctClusters2[itr->second][i]);
+
+                    // 5. --------------------------------------------------------------------------
+                    // Delete the moved nodes from parent's children.
+                    vector<SCNode*>::iterator itr2;
+
+                    for (itr2 = theParent->children.begin(); itr2 != theParent->children.end(); ++itr2) {
+                        if (vvec_distinctClusters2[itr->second][i]->name == (*itr2)->name) {
+                            theParent->children.erase(itr2);
+                            break;
+                        }
+                    }
+                }
+                theParent->children.push_back(newIntNode);
+                intNodeNum++;
+            }
+            //      scTree->DrawOnTerminal();
+        }
+
+        //  cout << scTree->GetTreeString() << endl;
+//      fout << scTree->GetTreeString() << endl;
+
+        unsigned numMultifur=0;
+
+        do {
+            numMultifur=0;
+            dfs_resolve_one(scTree->root, rg2, scTree, vec_trashcan_SCNODEp);
+            dfs_check_multifur(scTree->root, numMultifur);
+        } while (numMultifur != 0);
+
+        /***************************/
+        // The completed tree !!!
+        /***************************/
+        string temptree = scTree->GetTreeString(true, 100.0);
+//      string temptree = scTree->GetTreeString();
+        fout << temptree;
+        fout << endl;
+
+        vec_bs_selected.clear();
+        mmap_cluster.clear();
+        vvec_distinctClusters2.clear();
+
+        for (unsigned ii=0; ii<vec_trashcan_SCNODEp.size(); ++ii) {
+            if (vec_trashcan_SCNODEp[ii]) delete vec_trashcan_SCNODEp[ii];
+            vec_trashcan_SCNODEp[ii] = NULL;
+        }
+        vec_trashcan_SCNODEp.clear();
+
+        if (vec_trashcan_STRING.size()) {
+            vec_trashcan_STRING.clear();
+        }
+    }
+    fout.close();
+
+
+//  map_random_str_out.clear();
+//  map_random_str_in.clear();
+//  fout.close();
+
+
+    // CPU time comsumed
+    struct rusage a;
+    if (getrusage(RUSAGE_SELF,&a) == -1) {
+        cerr << "ERROR: getrusage failed.\n";
+        exit(2);
+    }
+    cout << "\n    Total CPU time: " << a.ru_utime.tv_sec+a.ru_stime.tv_sec << " sec and ";
+    cout << a.ru_utime.tv_usec+a.ru_stime.tv_usec << " usec.\n";
+
+
+
+    return 1;
+}
+// eof
+
+
+
