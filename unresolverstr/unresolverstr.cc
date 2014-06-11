@@ -152,11 +152,14 @@ void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) {
 }
 
 void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<SCNode*> &vec_trashcan_SCNODEp) {
-  if (node == NULL) return; //when will we hit this?
+
+  if (node == NULL) return; 
   
   unsigned numChildren = node->NumChildren();
-  
+  cout << "hello! my name is: " << node->name << endl;
+
   if (numChildren != 0) { //if this node is not a leaf
+    cout << "i am not a leaf... recursing" << endl;
     for (unsigned i=0; i<numChildren; ++i) {
       dfs_resolve_one(node->children[i], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
     }
@@ -168,8 +171,16 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
     // 2. add two internal nodes, intNodeA and intNodeB
     // 3. dangle two choosed nodes as children of intNodeA
     // 4. dangle the other nodes as children of intNodeB
-
+    cout << "out of recusion! my name is:" << node->name << endl;
     if (numChildren == 3) {
+
+      cout << "I have exactly three children." << endl;
+      for (int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL)
+	  continue;
+	cout << node->children[i]->name << endl;
+      }
+
       vector<int> vec_r;
       int32 ir;
       for (unsigned i=0; i<2; ++i) {
@@ -180,11 +191,11 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
 	}
 	vec_r.push_back(ir);
       }
-      
+           
       assert(vec_r[0] >= 0);
       assert(vec_r[1] >= 0);
       
-      // Make a new interenal node
+      // Make a new internal node
       SCNode* intNodeA = new SCNode();
       vec_trashcan_SCNODEp.push_back(intNodeA);
       
@@ -192,7 +203,6 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       
       // Add the new internal node in nodelist of the node
       sctree->nodelist.push_back(intNodeA);
-
 
       // dangle two randomly chosen children as children of the new
       // internal node
@@ -226,8 +236,26 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       
       // update the new internal nodes
       intNodeA->parent = node;
+      cout << "my children are now:" << endl;
+      for (int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL)
+	  continue;
+	cout << node->children[i]->name << endl;
+      }
+      cout << "children of new node, intX:" << endl;
+      for (int i = 0; i < intNodeA->children.size(); i++){
+	if (node->children[i] == NULL)
+	  continue;
+      cout << intNodeA->children[i]->name << endl;
+      }
     } //end if numChildren == 3
     else if (numChildren > 3) {
+      cout << "I have more than three children!" << endl;
+      for (int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL)
+	  continue;
+	cout << node->children[i]->name << endl;
+      }
       vector<int> vec_r;
       int32 ir;
 
@@ -242,7 +270,10 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       
       assert(vec_r[0] >= 0);
       assert(vec_r[1] >= 0);
-      
+      //cout << "the two children that are going to node a are:" << endl;
+      //cout << node->children[vec_r[0]]->name << endl;
+      //cout << node->children[vec_r[1]]->name << endl;
+
       SCNode* intNodeA = new SCNode();
       SCNode* intNodeB = new SCNode();
       
@@ -265,22 +296,32 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       assert(intNodeA->NumChildren() == 2);
       
       // dangle the other nodes as intNodeB's children
-      for (unsigned i=0; i<numChildren; ++i) {
+      for (unsigned i=0; i<node->children.size(); ++i) {
+	if (node->children[i] == NULL)
+	  continue;
+	//cout << "i is: " << i << endl;
+	//cout << "name is: " << node->children[i]->name << endl;
 	if (i != vec_r[0] && i != vec_r[1]) {
+	  //cout << "this node is being added as B's child.." << endl;
 	  node->children[i]->parent = intNodeB;
 	  intNodeB->children.push_back(node->children[i]);
 	}
       }
-      
+
       assert(intNodeB->NumChildren() == numChildren-2);
-      
-      // update the original node
+
+       // update the original node
       // clear the original children info
       assert(node->NumChildren() == numChildren);
+
+
       node->ClearChildren();
+   
       assert(node->NumChildren() == 0);
       assert(intNodeA != NULL);
       assert(intNodeB != NULL);
+
+
       
       node->children[0] = intNodeA;
       node->children[1] = intNodeB;
@@ -291,8 +332,36 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       // update the new internal nodes
       intNodeA->parent = node;
       intNodeB->parent = node;
-    }
-  }
+      cout << "my children are now:" << endl;
+      for (int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL){
+	  cout << "(null)" << endl;
+	  continue;
+	}
+	cout << node->children[i]->name << endl;
+      }
+      cout << "children of first new node, intNodeA:" << endl;
+      for (int i = 0; i < intNodeA->children.size(); i++){
+	if (intNodeA->children[i] == NULL){
+	  cout << "(null)" << endl;
+	  continue;
+	}
+	cout << intNodeA->children[i]->name << endl;
+      }
+      cout << "children of second new node, intNodeB:" << endl;
+      for (int i = 0; i < intNodeB->children.size(); i++){
+	if (intNodeB->children[i] == NULL){
+      	  cout << "(null)" << endl;
+	  continue;
+	}
+	cout << intNodeB->children[i]->name << endl;
+      }
+      if (intNodeB->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
+	dfs_resolve_one(intNodeB, rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
+      }
+    } // end numchildren greater than 3
+    cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl;
+  } //end num children greater than 0
 }
 
 
@@ -358,7 +427,7 @@ BitSet* dfs_hashcs_SC_nbit_wo_T2_NEWICK(NEWICKNODE* startNode, LabelMap &lm, vec
     // Thus, OR the bitstrings and make a bit string for the bipartition
     BitSet* bs = new BitSet(NUM_TAXA);
     
-    assert(startNode->Nchildren < 3);
+    //assert(startNode->Nchildren < 3);
     
     for (int i=0; i<startNode->Nchildren; ++i) {
       BitSet* ebs = dfs_hashcs_SC_nbit_wo_T2_NEWICK(startNode->child[i], lm, vec_bs);
@@ -527,8 +596,8 @@ int main(int argc, char** argv) {
 
 
   // Remove two biaprtitions unnecessary (WHY DO WE DO THIS?)
-  vec_bs.erase(vec_bs.end());
-  vec_bs.erase(vec_bs.end());
+  //vec_bs.erase(vec_bs.end());
+  //vec_bs.erase(vec_bs.end());
   
 
   int32 seed = time(0);                // random seed
@@ -782,9 +851,9 @@ int main(int argc, char** argv) {
     fout_resolved.open("resolved_tree.tre");
     string temptree = scTree->GetTreeString();
     
-    fout_resolved << temptree;
+    fout_resolved << temptree << endl;
     fout_resolved.close();
-    
+    return 2; //remember to comment this out!
     /********************************************************/
     // Read the fully resolved tree and collect bipartitions
     /********************************************************/
@@ -816,8 +885,8 @@ int main(int argc, char** argv) {
     fclose(fp);
     
     //AGAIN, WHY THE HELL ARE WE DOING THIS?
-    vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
-    vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
+    //vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
+    //vec_bs_newly_resolved.erase(vec_bs_newly_resolved.end());
     
     vector<int> temp_rand;
     
@@ -968,7 +1037,6 @@ int main(int argc, char** argv) {
 	vec_trashcan_STRING.push_back(newIntNodeName);
 	
 	SCNode* newIntNode = new SCNode();
-	//              newIntNode->SetDistance(0.123456);
 	vec_trashcan_SCNODEp.push_back(newIntNode);
 	
 	newIntNode->name = newIntNodeName;
@@ -1022,7 +1090,10 @@ int main(int argc, char** argv) {
     /***************************/
     // The completed tree !!!
     /***************************/
+    //be sure to change false back to true!!
+    //string temptree = scTree->GetTreeString();
     string temptree = scTree->GetTreeString(true, 100.0);
+
     fout << temptree;
     fout << endl;
     
