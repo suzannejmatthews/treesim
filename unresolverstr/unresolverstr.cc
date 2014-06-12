@@ -107,7 +107,6 @@
 
 // From Split-Dist
 #include "label-map.hh"
-#include "bitset.hh"
 
 // Etc
 #include <cassert>
@@ -154,12 +153,14 @@ void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) {
 void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<SCNode*> &vec_trashcan_SCNODEp) {
 
   if (node == NULL) return; 
-  
+  //newly added shortcut: if the child is named intNodeA or intX, we know that it is binary already.
+  if (node->name == "intX" || node->name=="intNodeA") return;   
+
   unsigned numChildren = node->NumChildren();
-  cout << "hello! my name is: " << node->name << endl;
+  //cout << "hello! my name is: " << node->name << endl;
 
   if (numChildren != 0) { //if this node is not a leaf
-    cout << "i am not a leaf... recursing" << endl;
+    //cout << "i am not a leaf... recursing" << endl;
     for (unsigned i=0; i<numChildren; ++i) {
       dfs_resolve_one(node->children[i], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
     }
@@ -171,15 +172,15 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
     // 2. add two internal nodes, intNodeA and intNodeB
     // 3. dangle two choosed nodes as children of intNodeA
     // 4. dangle the other nodes as children of intNodeB
-    cout << "out of recusion! my name is:" << node->name << endl;
+    //cout << "out of recusion! my name is:" << node->name << endl;
     if (numChildren == 3) {
 
-      cout << "I have exactly three children." << endl;
-      for (int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL)
-	  continue;
-	cout << node->children[i]->name << endl;
-      }
+      //cout << "I have exactly three children." << endl;
+      //for (unsigned int i = 0; i < node->children.size(); i++){
+      //if (node->children[i] == NULL)
+      ///  continue;
+      //cout << node->children[i]->name << endl;
+      //}
 
       vector<int> vec_r;
       int32 ir;
@@ -236,26 +237,26 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       
       // update the new internal nodes
       intNodeA->parent = node;
-      cout << "my children are now:" << endl;
-      for (int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL)
-	  continue;
-	cout << node->children[i]->name << endl;
-      }
-      cout << "children of new node, intX:" << endl;
-      for (int i = 0; i < intNodeA->children.size(); i++){
-	if (node->children[i] == NULL)
-	  continue;
-      cout << intNodeA->children[i]->name << endl;
-      }
+      //cout << "my children are now:" << endl;
+      //for (unsigned int i = 0; i < node->children.size(); i++){
+      //if (node->children[i] == NULL)
+      //continue;
+      //cout << node->children[i]->name << endl;
+      //}
+      //cout << "children of new node, intX:" << endl;
+      //for (unsigned int i = 0; i < intNodeA->children.size(); i++){
+      //if (node->children[i] == NULL)
+      //continue;
+      //cout << intNodeA->children[i]->name << endl;
+      //}
     } //end if numChildren == 3
     else if (numChildren > 3) {
-      cout << "I have more than three children!" << endl;
-      for (int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL)
-	  continue;
-	cout << node->children[i]->name << endl;
-      }
+      //cout << "I have more than three children!" << endl;
+      //for (unsigned int i = 0; i < node->children.size(); i++){
+      //if (node->children[i] == NULL)
+      // continue;
+      //cout << node->children[i]->name << endl;
+      //}
       vector<int> vec_r;
       int32 ir;
 
@@ -296,7 +297,7 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       assert(intNodeA->NumChildren() == 2);
       
       // dangle the other nodes as intNodeB's children
-      for (unsigned i=0; i<node->children.size(); ++i) {
+      for (int i=0; i<node->children.size(); ++i) {
 	if (node->children[i] == NULL)
 	  continue;
 	//cout << "i is: " << i << endl;
@@ -332,41 +333,41 @@ void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<S
       // update the new internal nodes
       intNodeA->parent = node;
       intNodeB->parent = node;
-      cout << "my children are now:" << endl;
-      for (int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL){
-	  cout << "(null)" << endl;
-	  continue;
-	}
-	cout << node->children[i]->name << endl;
-      }
-      cout << "children of first new node, intNodeA:" << endl;
-      for (int i = 0; i < intNodeA->children.size(); i++){
-	if (intNodeA->children[i] == NULL){
-	  cout << "(null)" << endl;
-	  continue;
-	}
-	cout << intNodeA->children[i]->name << endl;
-      }
-      cout << "children of second new node, intNodeB:" << endl;
-      for (int i = 0; i < intNodeB->children.size(); i++){
-	if (intNodeB->children[i] == NULL){
-      	  cout << "(null)" << endl;
-	  continue;
-	}
-	cout << intNodeB->children[i]->name << endl;
-      }
+      //cout << "my children are now:" << endl;
+      //for (unsigned int i = 0; i < node->children.size(); i++){
+      //if (node->children[i] == NULL){
+      // cout << "(null)" << endl;
+      //continue;
+      //}
+      //cout << node->children[i]->name << endl;
+      //}
+      //cout << "children of first new node, intNodeA:" << endl;
+      //for (unsigned int i = 0; i < intNodeA->children.size(); i++){
+      //if (intNodeA->children[i] == NULL){
+      //cout << "(null)" << endl;
+      //continue;
+      //}
+      //cout << intNodeA->children[i]->name << endl;
+      //}
+      //cout << "children of second new node, intNodeB:" << endl;
+      //for (unsigned int i = 0; i < intNodeB->children.size(); i++){
+      //if (intNodeB->children[i] == NULL){
+      //cout << "(null)" << endl;
+      //continue;
+      //}
+      //cout << intNodeB->children[i]->name << endl;
+      //}
       if (intNodeB->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
 	dfs_resolve_one(intNodeB, rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
       }
     } // end numchildren greater than 3
-    cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl;
+    //cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl;
   } //end num children greater than 0
 }
 
 
 void dfs_check_multifur(SCNode* node, unsigned &intMultifur) {
-  //this functiond determines if a particular tree is multifurcating or not
+  //this function determines if a particular tree is multifurcating or not
   //if at any point there is a multifurcation (children > 3), it returns with
   //initMultifur incremented by one.
 
@@ -387,23 +388,28 @@ void dfs_check_multifur(SCNode* node, unsigned &intMultifur) {
 
 
 
-BitSet dfs_collect_bp(NEWICKNODE* startNode, LabelMap &lm, vector<BitSet> & vec_bs_resolved) {
+bool * dfs_collect_bp(NEWICKNODE* startNode, LabelMap &lm, vector<bool *> & vec_bs_resolved) {
   //collects bipartitions in a tree (seung's note: "implicit bp")
   if (startNode->Nchildren == 0) { //leaf node
-    BitSet bs(NUM_TAXA);
+    bool * bs = new bool[NUM_TAXA];
+    for (unsigned int i = 0; i < NUM_TAXA; i++)
+      bs[i] = 0;
     string temp(startNode->label);
     unsigned idx = lm[temp];
-    bs[idx] = true;
+    bs[idx] = 1;
     //return a bitstring with the taxon associated with that position set to 1
     return bs; 
   } else {
     // At this point, we find a bipartition.
     // Thus, OR the bitstrings and make a bit string for the bipartition
-    BitSet bs(NUM_TAXA);
-    
+    bool * bs = new bool[NUM_TAXA];
+    for (unsigned int i = 0; i < NUM_TAXA; i++)
+      bs[i] = 0;
     for (int i=0; i<startNode->Nchildren; ++i) {
-      BitSet ebs = dfs_collect_bp(startNode->child[i], lm, vec_bs_resolved);
-      bs |= ebs;
+      bool * ebs = dfs_collect_bp(startNode->child[i], lm, vec_bs_resolved);
+      for (unsigned int j = 0; j < NUM_TAXA; j++){
+	  bs[j] |= ebs[j];
+      }
     }
 
     if (find(vec_bs_resolved.begin(), vec_bs_resolved.end(), bs) == vec_bs_resolved.end()) {
@@ -414,30 +420,61 @@ BitSet dfs_collect_bp(NEWICKNODE* startNode, LabelMap &lm, vector<BitSet> & vec_
 }
 
 // IMPLICIT BP
-BitSet* dfs_hashcs_SC_nbit_wo_T2_NEWICK(NEWICKNODE* startNode, LabelMap &lm, vector<BitSet> & vec_bs) {
+bool * dfs_hashcs_SC_nbit_wo_T2_NEWICK(NEWICKNODE* startNode, LabelMap &lm, vector<bool *> & vec_bs) {
   if (startNode->Nchildren == 0) { //leaf node
-    BitSet* bs = new BitSet(NUM_TAXA);
+    //cout << "I am a leaf node!" << endl;
+    //cout << "my name is: " << startNode->label << endl;
+    bool * bs = new bool[NUM_TAXA];
+    for (unsigned int i = 0; i < NUM_TAXA; i++)
+      bs[i] = 0;
     string temp(startNode->label);
     unsigned idx = lm[temp];
-    (*bs)[idx] = true;
-    
+    //cout << "idx is: " << idx << endl;
+    //cout << "bs is first: ";
+    //for (unsigned int i = 0; i < NUM_TAXA; i++)
+    //  cout << bs[i];
+    //cout << endl;
+    bs[idx] = 1;
+    //cout << "i am now: "; 
+    //for (unsigned int i = 0; i < NUM_TAXA; i++)
+    //cout << bs[i];
+    //cout << endl;
     return bs;
-  } else {
-    // At this point, we find a bipartition.
-    // Thus, OR the bitstrings and make a bit string for the bipartition
-    BitSet* bs = new BitSet(NUM_TAXA);
-    
+  } else { //internal node
+        
+    //cout << "I am an internal node! I have: " << startNode->Nchildren << " children."<< endl;
+    bool * bs = new bool[NUM_TAXA];
+    for (unsigned int i = 0; i < NUM_TAXA; i++)
+      bs[i] = 0;
     //assert(startNode->Nchildren < 3);
     
     for (int i=0; i<startNode->Nchildren; ++i) {
-      BitSet* ebs = dfs_hashcs_SC_nbit_wo_T2_NEWICK(startNode->child[i], lm, vec_bs);
-      *bs |= *ebs;
-      if (ebs) {
-	delete ebs;
-	ebs = NULL;
-      }
+      //cout <<"recursing on first child.." << endl;
+      bool * ebs = dfs_hashcs_SC_nbit_wo_T2_NEWICK(startNode->child[i], lm, vec_bs);
+      //cout << "out of recusion! my child is: " << startNode->child[i]->label << endl;
+      //cout << "ebs is: ";
+      //for (unsigned int j = 0; j < NUM_TAXA; j++)
+      //cout << ebs[j];
+      //cout << endl;
+
+      for (unsigned int j = 0; j < NUM_TAXA; j++)
+	bs[j] |= ebs[j];
+      //if (ebs) {
+      //delete ebs;
+      //ebs = NULL;
+      //}
+      //cout << "bs is now: " << endl;
+      //for (unsigned int j = 0; j < NUM_TAXA; j++)
+      //cout << bs[j];
+      //cout << endl;
+      //cout << "{";
+      //for (unsigned int j = 0; j < NUM_TAXA; j++){
+      //if (bs[j] == 1)
+      //  cout << lm.name(j)<< ",";
+      //}
+      //cout << "}" << endl;
     }
-    vec_bs.push_back(*bs);
+    vec_bs.push_back(bs);
     
     return bs;
   }
@@ -562,7 +599,7 @@ int main(int argc, char** argv) {
   cout << "\n*** Reading tree file and collecting bipartitions ***\n";
   /*******************************************************************/
 
-  vector<BitSet> vec_bs; // to collect sc bipartitions
+  vector<bool *> vec_bs; // to collect sc bipartitions
   
   fp = fopen(argv[1], "r"); //reopen file
   if(!fp) {
@@ -590,13 +627,30 @@ int main(int argc, char** argv) {
     killnewicktree(newickTree);
   }
 
-  unsigned total_BPs = vec_bs.size()-2;
+  
+  unsigned total_BPs = vec_bs.size()-1;
+  //vec_bs.erase(vec_bs.end()); //remove star bipartition
+
   cout << "    vec_bs.size() = " << vec_bs.size() << endl;
   fclose(fp);
 
+  /*for (unsigned int i = 0; i < lm.size(); i++)
+    cout << lm.name(i);
+  cout << endl;
+  cout << "printing out the bipartitions:" << endl;
+  for (unsigned int i = 0; i < vec_bs.size(); i++){
+    cout << "{";
+    for (unsigned int j = 0; j < NUM_TAXA; j++){
+      if (vec_bs[i][j] == 1)
+	cout << lm.name(j) << ",";
+    }
+    cout << "}" << endl;
+    } */
 
+  //return 2;
+  
   // Remove two biaprtitions unnecessary (WHY DO WE DO THIS?)
-  //vec_bs.erase(vec_bs.end());
+
   //vec_bs.erase(vec_bs.end());
   
 
@@ -620,10 +674,10 @@ int main(int argc, char** argv) {
   unsigned numBPLimit = int(round(total_BPs * ResolutionRate));
 
 
-  /**************************************************/
+
   // Select r% (numBPLimit) bipartitoins from vec_bs
-  /**************************************************/
-  vector<BitSet> vec_bs_in;
+
+  vector<bool *> vec_bs_in;
 
   for (unsigned i=0; i<vec_bs.size(); ++i) {
     if (vec_random[i] < numBPLimit)
@@ -655,8 +709,8 @@ int main(int argc, char** argv) {
 
   vector<SCNode*> vec_trashcan_SCNODEp;
   vector<string> vec_trashcan_STRING;
-  vector<BitSet> vec_bs_selected;
-  vector<BitSet> vec_bs_newly_resolved;
+  vector<bool *> vec_bs_selected;
+  vector<bool *> vec_bs_newly_resolved;
   
   vector< vector<int> > vvec_assigned_BID(numOutputTrees);
   map<unsigned, vector<unsigned> > map_assigned_BID;
@@ -689,17 +743,17 @@ int main(int argc, char** argv) {
   ////////////////// 2 ///////////////////////////////////
 
 
-  /*******************************************************************************/
+
   // Collect actual bipartitoins and make cluster data structure one tree by one.
   // For each cluster information, a multifurcating tree (scTree) is constructed.
   // And them the tree will be resolved one by one and the newly found (resolved)
   // bipartitions are distributed to the other trees.
-  /*******************************************************************************/
+
 
   //create a star bipartition
-  BitSet bs(NUM_TAXA);
+  bool * bs = new bool[NUM_TAXA];
   for (unsigned i=0; i<NUM_TAXA; ++i) {
-    bs[i]=true;
+    bs[i]=1;
   }
     
   //beging building trees
@@ -736,11 +790,11 @@ int main(int argc, char** argv) {
       vvec_distinctClusters2.push_back(vec_nodes2);
     }
     
-    /*************************************************************************/
+
     // Insert the cluster into a multi-map for sorting in descending order of
     // the number of '1's.
     // This is to construct tree using the bipartitions
-    /*************************************************************************/
+
     for (unsigned i=0; i<vvec_distinctClusters2.size(); ++i) {
       mmap_cluster.insert(multimap<unsigned,unsigned>::value_type(vvec_distinctClusters2[i].size(), i));
     }
@@ -835,9 +889,9 @@ int main(int argc, char** argv) {
     //      fout << scTree->GetTreeString() << endl;
     
 
-    /********************************************************************/
+
     // The constructed trees are multifurcating trees. Thus, resolve it.
-    /********************************************************************/
+
     unsigned numMultifur=0;
     
     do {
@@ -846,17 +900,19 @@ int main(int argc, char** argv) {
       dfs_check_multifur(scTree->root, numMultifur);
     } while (numMultifur != 0);
 
-    //*******unfortunately, this tree is not fully resolved! Let's fix this first!!
+    //=========unfortunately, this tree is not fully resolved! Let's fix this first!!
     ofstream fout_resolved;
     fout_resolved.open("resolved_tree.tre");
     string temptree = scTree->GetTreeString();
     
     fout_resolved << temptree << endl;
     fout_resolved.close();
-    return 2; //remember to comment this out!
-    /********************************************************/
+
+    //return 2; //remember to comment this out!
+
+
     // Read the fully resolved tree and collect bipartitions
-    /********************************************************/
+
     fp = fopen("resolved_tree.tre", "r");
     if(!fp) {
       cout << "ERROR: file open error\n";
@@ -913,11 +969,18 @@ int main(int argc, char** argv) {
 
 	      for (unsigned m=0; m<map_assigned_BID[k].size(); ++m) {
 		// Check conflict in bipartitions
-		BitSet temp_bs(NUM_TAXA);
-		temp_bs = vec_bs_in[map_assigned_BID[k][m]];
-		temp_bs &= vec_bs_newly_resolved[i];
-		temp_bs.count_ones_zeros();
-		if (temp_bs.num_ones() < 2) {
+		bool * temp_bs = new bool[NUM_TAXA];
+		for (unsigned int z = 0; z < NUM_TAXA; z++)
+		  temp_bs[z] = vec_bs_in[map_assigned_BID[k][m]][z];
+		for (unsigned int z = 0; z < NUM_TAXA; z++)
+		  temp_bs[z] &= vec_bs_newly_resolved[i][z];
+		unsigned int countOnes = 0;
+		for (unsigned int z = 0; z < NUM_TAXA; z++){
+		  if (temp_bs[z] == 1)
+		    countOnes++;
+		}
+
+		if (countOnes < 2) {
 		  bCheck = false;
 		  break;
 		} else {
@@ -925,7 +988,8 @@ int main(int argc, char** argv) {
 		    newlyInserted++;
 		  } else break;
 		}
-	      }
+		delete temp_bs;
+	      } //end for
 	      
 	    }
 	  }
@@ -1087,9 +1151,9 @@ int main(int argc, char** argv) {
       dfs_check_multifur(scTree->root, numMultifur);
     } while (numMultifur != 0);
     
-    /***************************/
+
     // The completed tree !!!
-    /***************************/
+
     //be sure to change false back to true!!
     //string temptree = scTree->GetTreeString();
     string temptree = scTree->GetTreeString(true, 100.0);
@@ -1124,8 +1188,8 @@ int main(int argc, char** argv) {
   cout << a.ru_utime.tv_usec+a.ru_stime.tv_usec << " usec.\n";
 
 
-
-    return 1;
+ 
+  return 0;
 }
 // eof
 

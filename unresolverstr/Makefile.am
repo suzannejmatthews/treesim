@@ -18,7 +18,7 @@ unresolverstr_SOURCES =
 
 # From Split-Dist
 unresolverstr_SOURCES += label-map.hh label-map.cc
-unresolverstr_SOURCES += bitset.hh bitset.cc
+#unresolverstr_SOURCES += bitset.hh bitset.cc
 
 # My classes
 unresolverstr_SOURCES += hashfunc.hh hashfunc.cc

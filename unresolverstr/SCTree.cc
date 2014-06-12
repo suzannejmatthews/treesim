@@ -116,27 +116,15 @@ SCTree::GetTreeRecurse(
     string distance = "";
 
     if (distances) {
-//      double bl = node->GetDistance() / scaleFactor;
-        double bl = 0.123456;
-
-        // We don't want to output exponential notation
-        if (bl < 0.0001)
-            distance = "0.0001";
-        else {
-            char buf[32];
-            sprintf(buf, "%f", bl);
-            distance = buf;
-        }
+      //double bl = node->GetDistance() / scaleFactor;
+      distance="0.123456";
     }
 
-    double bl = 0.123456;
-    char buf[32];
-    sprintf(buf, "%f", bl);
-    distance = buf;
+    distance="0.123456";
 
     if (node->IsLeaf()) {
-        ret.append(node->name + ":" + distance);
-//      ret.append(node->name);
+      ret.append(node->name + ":" + distance);
+      //	ret.append(node->name);
         return;
     }
 
