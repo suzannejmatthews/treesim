@@ -679,21 +679,28 @@ int main(int argc, char** argv) {
 
   vector<bool *> vec_bs_in;
 
-  for (unsigned i=0; i<vec_bs.size(); ++i) {
+  for (unsigned i=0; i<total_BPs; ++i) {
     if (vec_random[i] < numBPLimit)
       vec_bs_in.push_back(vec_bs[i]);
   }
   
-  unsigned remaining_BPs = vec_bs.size() - vec_bs_in.size();
+  unsigned remaining_BPs = vec_bs.size()-1 - vec_bs_in.size();
   cout << "remaining BPs=" << remaining_BPs << endl;
   
   
   ///////////////
+  //for (unsigned int i = 0; i < vec_bs.size(); i++){
+  //  bool * garbage = vec_bs[i];
+  //  vec_bs[i] = NULL;
+  //  delete[] garbage;
+  //}
+  //vec_bs[i] = NULL;
+  //}
   vec_bs.clear(); //we don't care about this array anymore -- now all we care about is vec_bs_in
   ///////////////
   
 
-  cout << "# of bipartitoins considered (in) = " << vec_bs_in.size() << endl;
+  cout << "# of bipartitions considered (in) = " << vec_bs_in.size() << endl;
 
   multimap<unsigned, unsigned, greater<unsigned> > mmap_cluster;
   vector<vector<SCNode*> > vvec_distinctClusters2;
@@ -988,7 +995,7 @@ int main(int argc, char** argv) {
 		    newlyInserted++;
 		  } else break;
 		}
-		delete temp_bs;
+		delete[] temp_bs;
 	      } //end for
 	      
 	    }

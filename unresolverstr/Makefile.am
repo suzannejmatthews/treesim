@@ -1,9 +1,10 @@
 
 #AM_CXXFLAGS = -static
-AM_CXXFLAGS = -Wall
-#CXXFLAGS += -O3 -pg
+AM_CXXFLAGS = -Wall -g
+#CXXFLAGS += -O0 -pg
 #CXXFLAGS += -g
-AM_CXXFLAGS += -O3 -pg -fexpensive-optimizations
+#AM_CXXFLAGS += -O3 -pg -fexpensive-optimizations
+AM_CXXFLAGS += -O0
 
 #AM_CXXFLAGS += -DNDEBUG
 
@@ -22,7 +23,7 @@ unresolverstr_SOURCES += label-map.hh label-map.cc
 
 # My classes
 unresolverstr_SOURCES += hashfunc.hh hashfunc.cc
-unresolverstr_SOURCES += hashmap.hh hashmap.cc
+#unresolverstr_SOURCES += hashmap.hh hashmap.cc
 
 # From Mersenne Twist 
 unresolverstr_SOURCES += mersenne.cc
