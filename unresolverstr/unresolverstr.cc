@@ -915,12 +915,9 @@ int main(int argc, char** argv) {
     fout_resolved << temptree << endl;
     fout_resolved.close();
 
-    //return 2; //remember to comment this out!
-
-
     // Read the fully resolved tree and collect bipartitions
 
-    fp = fopen("resolved_tree.tre", "r");
+    /* fp = fopen("resolved_tree.tre", "r");
     if(!fp) {
       cout << "ERROR: file open error\n";
       exit(0);
@@ -1163,7 +1160,8 @@ int main(int argc, char** argv) {
 
     //be sure to change false back to true!!
     //string temptree = scTree->GetTreeString();
-    string temptree = scTree->GetTreeString(true, 100.0);
+    */
+    temptree = scTree->GetTreeString(true, 100.0);
 
     fout << temptree;
     fout << endl;
