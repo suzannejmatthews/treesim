@@ -12,6 +12,9 @@
 
 #include "SCTree.hh"
 #include <iostream>
+#include <stdlib.h>
+#include <sstream>
+#include <iomanip>
 
 SCTree::SCTree()
 {
@@ -117,10 +120,15 @@ SCTree::GetTreeRecurse(
 
     if (distances) {
       //double bl = node->GetDistance() / scaleFactor;
-      distance="0.123456";
+      double bl = double(rand() % 100000) / 1000000;
+      stringstream cv;
+      cv << fixed << setprecision(6) << bl;
+      distance= cv.str();
     }
-
-    distance="0.123456";
+    double bl = double(rand() % 100000) / 1000000;
+    stringstream cv;
+    cv << fixed << setprecision(6) << bl;
+    distance=cv.str();
 
     if (node->IsLeaf()) {
       ret.append(node->name + ":" + distance);
