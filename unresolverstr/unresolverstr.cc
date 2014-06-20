@@ -82,6 +82,7 @@ void print_error(int err){
   }
 }
 
+//label collection functions
 void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) { 
   //recursive procedure to get all the taxa in a particular tree. Initially, node points to root.
   if (node->Nchildren == 0) {
@@ -127,196 +128,7 @@ LabelMap getLabels(char * treefile){
   return lm;
 }
 
-vector<int> pickChildren(unsigned int pick, TRandomMersenne & rg, unsigned numChildren) {
-  vector<int> vec_r;
-  int32 ir;
-  for (unsigned int i = 0; i < pick; ++i) {
-    ir = rg.IRandom(0, numChildren-1);
-    if (find(vec_r.begin(), vec_r.end(), ir) != vec_r.end()) {
-      --i;
-      continue;
-    }
-    vec_r.push_back(ir);
-  }
-  for (unsigned int i = 0; i < vec_r.size(); i++)
-    assert(vec_r[i] >= 0);
-  return vec_r;
-}
-
-void add_internal_node(SCNode * node, SCTree *sctree, vector<SCNode*> &vec_trashcan_SCNODEp, string label, vector<int> vec_r, unsigned int numChildren){
-  SCNode* intNodeA = new SCNode();
-  vec_trashcan_SCNODEp.push_back(intNodeA);
-  intNodeA->name = label;
-      
-  // Add the new internal node in nodelist of the node
-  sctree->nodelist.push_back(intNodeA);
-
-  // dangle selected children as children of the new
-  // internal node
-  for (unsigned int i = 0; i < vec_r.size(); i++){
-    node->children[vec_r[i]]->parent = intNodeA;
-    intNodeA->children.push_back(node->children[vec_r[i]]);
-    // remove the moved children from the nodelist in the node
-    node->children[vec_r[i]] = NULL;
-    assert(intNodeA->children[i]->parent == intNodeA);
-  }        
-
-  assert(intNodeA->NumChildren() == vec_r.size());
-      
-  // update the original node
-  assert(node->NumChildren() == numChildren - vec_r.size());
-  assert(intNodeA != NULL);
-      
-  vector<SCNode*> vec_temp = node->children;
-  vec_temp.push_back(intNodeA);
-  node->children.clear();
-      
-  for (unsigned j=0; j<vec_temp.size(); ++j) {
-    if (vec_temp[j] != NULL) node->children.push_back(vec_temp[j]);
-  }
-      
-  // update the new internal nodes
-  intNodeA->parent = node;
-  cout << "children of new node " << label << ":" << endl;
-  for (unsigned int i = 0; i < intNodeA->children.size(); i++){
-    if (node->children[i] == NULL)
-      continue;
-    cout << intNodeA->children[i]->name << endl;
-  }
-}
-
-void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<SCNode*> &vec_trashcan_SCNODEp) {
-
-  if (node == NULL) return; 
-  //newly added shortcut: if the child is named intX, we know that it is binary already.
-  if (node->name == "intX") return;   
-
-  unsigned numChildren = node->NumChildren();
-  cout << "hello! my name is: " << node->name << endl; //printing
-
-  // if numChildren > 2, make subtree into a binary tree
-  if (numChildren != 0) { //if this node is not a leaf
-    cout << "i am not a leaf... recursing" << endl; //printing
-    for (unsigned i=0; i<numChildren; ++i) {
-      dfs_resolve_one(node->children[i], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
-    }
-
-    //cout << "out of recusion! my name is:" << node->name << endl;
-
-    if (numChildren == 3) {
-
-      //printing
-      cout << "I have exactly three children." << endl;
-      for (unsigned int i = 0; i < node->children.size(); i++){
-      if (node->children[i] == NULL)
-        continue;
-      cout << node->children[i]->name << endl;
-      }
-      //printing
-
-      vector<int> vec_r = pickChildren(2, rg, numChildren); //pick two random children
-      add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intX", vec_r, numChildren); //make a new internal node, dangling children off it
-      
-      //printing
-      
-      cout << "my children are now:" << endl;
-      for (unsigned int i = 0; i < node->children.size(); i++){
-      if (node->children[i] == NULL)
-	continue;
-      cout << node->children[i]->name << endl;
-      }
-
-      
-      //printing
-
-    } //end if numChildren == 3
-    else if (numChildren > 3) {
-      //printing
-      
-      cout << "I have more than three children!" << endl;
-      for (unsigned int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL)
-	  continue;
-	cout << node->children[i]->name << endl;
-	}
-      //printing
-      unsigned int first = rg.IRandom(2, numChildren-2); //each node (A and B) should get some number of children (at least two per)
-      vector<int> vec_r = pickChildren(first, rg, numChildren);
-
-
-      
-            
-      add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intA", vec_r, numChildren); //make a new internal node, dangling children off it
-
-      assert(node->NumChildren() == numChildren-first+1);
-      SCNode* intNodeB = new SCNode();      
-      vec_trashcan_SCNODEp.push_back(intNodeB);
-      intNodeB->name = "intB";
-      sctree->nodelist.push_back(intNodeB);
-            
-      // dangle the other nodes as intNodeB's children
-      unsigned int count = 0;
-      for (unsigned int i=0; i<node->children.size(); ++i) {
-	if (node->children[i] == NULL || node->children[i]->name == "intA")
-	  continue;
-	node->children[i]->parent = intNodeB;
-	intNodeB->children.push_back(node->children[i]);
-	node->children[i] = NULL;
-	assert(intNodeB->children[count]->parent == intNodeB);
-	count++;
-      }
-      assert(intNodeB->NumChildren() == numChildren-first);
-      
-      // update the original node
-      // clear the original children info
-      //assert(node->NumChildren() == numChildren);
-      vector<SCNode*> vec_temp = node->children;
-      vec_temp.push_back(intNodeB);
-      node->children.clear();
-      for (unsigned j=0; j<vec_temp.size(); ++j) {
-	if (vec_temp[j] != NULL) node->children.push_back(vec_temp[j]);
-      }
-      //NEEDS FIXING!
-      assert(intNodeB != NULL);
-      assert(node->children[0] != NULL);
-      assert(node->children[1] != NULL);
-      
-      // update the new internal nodes
-       intNodeB->parent = node;
-
-      //printing
-      
-      cout << "my children are now:" << endl;
-      for (unsigned int i = 0; i < node->children.size(); i++){
-	if (node->children[i] == NULL){
-	  cout << "(null)" << endl;
-	  continue;
-	  }
-	cout << node->children[i]->name << endl;
-      }
-      
-      cout << "children of second new node, intNodeB:" << endl;
-      for (unsigned int i = 0; i < intNodeB->children.size(); i++){
-	if (intNodeB->children[i] == NULL){
-	  cout << "(null)" << endl;
-	  continue;
-	}
-	cout << intNodeB->children[i]->name << endl;
-	}
-      //printing
-      
-      if (node->children[0]->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
-	dfs_resolve_one(node->children[0], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
-      }
-      if (node->children[1]->NumChildren() > 2){
-	dfs_resolve_one(node->children[1], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
-      }
-    } // end numchildren greater than 3
-    cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl; //printing
-  } //end num children greater than 0
-}
-
-// IMPLICIT BP
+//bipartition collection function
 bool * dfs_hashcs_SC_nbit_wo_T2_NEWICK(NEWICKNODE* startNode, LabelMap &lm, vector<bool *> & vec_bs) {
   if (startNode->Nchildren == 0) { //leaf node
     //cout << "I am a leaf node!" << endl;
@@ -356,6 +168,183 @@ string itos(int i)  // convert int to string
     s << i;
     return s.str();
 }
+
+vector<int> pickChildren(unsigned int pick, TRandomMersenne & rg, unsigned numChildren) {
+  vector<int> vec_r;
+  int32 ir;
+  for (unsigned int i = 0; i < pick; ++i) {
+    ir = rand() % numChildren;
+    //ir = rg.IRandom(0, numChildren-1);
+    if (find(vec_r.begin(), vec_r.end(), ir) != vec_r.end()) {
+      --i;
+      continue;
+    }
+    vec_r.push_back(ir);
+  }
+  for (unsigned int i = 0; i < vec_r.size(); i++)
+    assert(vec_r[i] >= 0);
+  return vec_r;
+}
+
+void add_internal_node(SCNode * node, SCTree *sctree, vector<SCNode*> &vec_trashcan_SCNODEp, string label, vector<int> vec_r, unsigned int numChildren){
+  SCNode* intNodeA = new SCNode();
+  vec_trashcan_SCNODEp.push_back(intNodeA);
+  intNodeA->name = label;
+      
+  // Add the new internal node in nodelist of the node
+  sctree->nodelist.push_back(intNodeA);
+
+  // dangle selected children as children of the new
+  // internal node
+  if (vec_r.size() != 0){
+    random_shuffle(vec_r.begin(), vec_r.end());
+    for (unsigned int i = 0; i < vec_r.size(); i++){
+      node->children[vec_r[i]]->parent = intNodeA;
+      intNodeA->children.push_back(node->children[vec_r[i]]);
+      // remove the moved children from the nodelist in the node
+      node->children[vec_r[i]] = NULL;
+      assert(intNodeA->children[i]->parent == intNodeA);
+    }        
+    
+    assert(intNodeA->NumChildren() == vec_r.size());
+      
+    // update the original node
+    assert(node->NumChildren() == numChildren - vec_r.size());
+  }
+  else{
+    unsigned int count = 0;
+    for (unsigned int i=0; i<node->children.size(); ++i) {
+      if (node->children[i] == NULL || node->children[i]->name == "intA")
+	continue;
+      node->children[i]->parent = intNodeA;
+      intNodeA->children.push_back(node->children[i]);
+      node->children[i] = NULL;
+      assert(intNodeA->children[count]->parent == intNodeA);
+      count++;
+    }
+  }
+  assert(intNodeA != NULL);
+      
+  vector<SCNode*> vec_temp = node->children;
+  vec_temp.push_back(intNodeA);
+  node->children.clear();
+      
+  for (unsigned j=0; j<vec_temp.size(); ++j) {
+    if (vec_temp[j] != NULL) node->children.push_back(vec_temp[j]);
+  }
+      
+  // update the new internal nodes
+  intNodeA->parent = node;
+  /*cout << "children of new node " << label << ":" << endl;
+  for (unsigned int i = 0; i < intNodeA->children.size(); i++){
+    if (node->children[i] == NULL)
+      cout << "(null)" << endl;
+    cout << intNodeA->children[i]->name << endl;
+    }*/
+}
+
+void dfs_resolve_one(SCNode* node, TRandomMersenne& rg, SCTree* sctree, vector<SCNode*> &vec_trashcan_SCNODEp) {
+
+  if (node == NULL) return; 
+  //newly added shortcut: if the child is named intX, we know that it is binary already.
+  if (node->name == "intX") return;   
+
+  unsigned numChildren = node->NumChildren();
+  //cout << "hello! my name is: " << node->name << endl; //printing
+
+  // if numChildren > 2, make subtree into a binary tree
+  if (numChildren != 0) { //if this node is not a leaf
+    //cout << "i am not a leaf... recursing" << endl; //printing
+    for (unsigned i=0; i<numChildren; ++i) {
+      dfs_resolve_one(node->children[i], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
+    }
+
+    //cout << "out of recusion! my name is:" << node->name << endl;
+    if (numChildren == 3) {
+
+      //printing
+      /*cout << "I have exactly three children." << endl;
+      for (unsigned int i = 0; i < node->children.size(); i++){
+      if (node->children[i] == NULL)
+        continue;
+      cout << node->children[i]->name << endl;
+      }*/
+      //printing
+
+      vector<int> vec_r = pickChildren(2, rg, numChildren); //pick two random children
+      add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intX", vec_r, numChildren); //make a new internal node, dangling children off it
+      
+      //printing      
+      /*cout << "my children are now:" << endl;
+      for (unsigned int i = 0; i < node->children.size(); i++){
+      if (node->children[i] == NULL)
+	continue;
+      cout << node->children[i]->name << endl;
+      }*/
+      //printing
+
+    } //end if numChildren == 3
+    else if (numChildren > 3) {
+      //printing
+      /*cout << "I have more than three children!" << endl;
+      for (unsigned int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL)
+	  continue;
+	cout << node->children[i]->name << endl;
+	}*/
+      //printing
+
+      unsigned int first = rg.IRandom(1, numChildren-1); //each node (A and B) should get some number of children (at least two per)
+      if (first ==1) 
+	first = numChildren-1; //either way, it will result in 1 child on one side, and n-1 children on the other
+      vector<int> vec_r = pickChildren(first, rg, numChildren);
+      if (first != numChildren-1){ //that means the number is between 2 .. numChildren -2; so create two internal nodes
+	add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intA", vec_r, numChildren); //make a new internal node, dangling children off it
+	assert(node->NumChildren() == numChildren-first+1);
+	vec_r.clear(); // we are going to add the remainder of the nodes to intB
+	add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intB", vec_r, numChildren); //make a new internal node, dangling remainder of children off it
+	
+      }
+      else{//create one new internal node
+	add_internal_node(node, sctree, vec_trashcan_SCNODEp, "intY", vec_r, numChildren); //make a new internal node, dangling n-1 children off it
+      }
+
+      assert(node->NumChildren() == 2);
+      assert(node->children[0] != NULL);
+      assert(node->children[1] != NULL);
+      if (first != numChildren - 1){
+	assert(node->children[1]->NumChildren() == numChildren-first);  
+      }
+      else{
+	assert(node->children[1]->NumChildren() == first);  
+      }
+      // update the new internal nodes
+
+
+      //printing      
+      /*cout << "my children are now:" << endl;
+      for (unsigned int i = 0; i < node->children.size(); i++){
+	if (node->children[i] == NULL){
+	  cout << "(null)" << endl;
+	  continue;
+	  }
+	cout << node->children[i]->name << endl;
+	}*/
+      //printing      
+      
+      if (node->children[0]->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
+	dfs_resolve_one(node->children[0], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
+      }
+      if (node->children[1]->NumChildren() > 2){
+	dfs_resolve_one(node->children[1], rg, sctree, vec_trashcan_SCNODEp); //recursively call the procedure until we hit a leaf node
+      }
+    } // end numchildren greater than 3
+    //cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl; //printing
+  } //end num children greater than 0
+}
+
+// IMPLICIT BP
+
 
 string buildTree(vector<bool *> vec_bs_in, LabelMap lm, TRandomMersenne &rg2){ //if this is not passed by reference, it gets all messed up...
   // Collect actual bipartitions and make cluster data structure one tree by one.
@@ -494,7 +483,7 @@ string buildTree(vector<bool *> vec_bs_in, LabelMap lm, TRandomMersenne &rg2){ /
   if (vec_trashcan_STRING.size()) {
     vec_trashcan_STRING.clear();
   }
-
+  //delete scTree;
   //return tree
   return myTree;
 }
@@ -684,6 +673,7 @@ int main(int argc, char** argv) {
   ////////////////// 2 ///////////////////////////////////
 
   for (unsigned numOut=0; numOut<numOutputTrees; ++numOut) {
+
     if (numOut % printMod == 0){
       cout << "Building tree " << numOut << "(" << percent << "% done)" << endl;
       percent+=10;
