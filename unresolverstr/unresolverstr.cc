@@ -619,7 +619,7 @@ int main(int argc, char** argv) {
   unsigned remaining_BPs = vec_bs.size()-1 - vec_bs_in.size();
   cout << "remaining BPs=" << remaining_BPs << endl;
   
-  cout << "the bipartitions that will be used:" << endl;
+  /*cout << "the bipartitions that will be used:" << endl;
   for (unsigned int i = 0; i < vec_bs_in.size(); i++){
     cout << "{";
     for (unsigned int j = 0; j < NUM_TAXA; j++){
@@ -627,7 +627,7 @@ int main(int argc, char** argv) {
 	cout << lm.name(j) << ",";
     }
     cout << "}" << endl;
-  }
+    }*/
   
   vec_bs_in.push_back(vec_bs[total_BPs]); //add the star bipartition too
     
