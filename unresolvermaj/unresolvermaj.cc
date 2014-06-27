@@ -672,13 +672,14 @@ int main(int argc, char** argv)
     //for each of the selected bipartitions:
     for (unsigned int i = 0; i < vec_random.size(); i++){
       unsigned int perc = rand() % 50 + 50; // generate a random number between 50 .. 100
+      unsigned int bipart = vec_random[i];
       //cout << "Adding bipartition: " << vec_random[i] << " to " << perc << "% of the trees" << endl;
       perc = int((float(perc)/100) * numOutputTrees);
       //cout << "perc will actually be: " << perc << endl;
       vector<unsigned int> selected_trees = genRandomNums(perc, numOutputTrees);
       for (unsigned int j = 0; j < selected_trees.size(); j++){
 	unsigned int tree_id = selected_trees[j];
-	tree_matrix[tree_id].push_back(vec_bs[i]);
+	tree_matrix[tree_id].push_back(vec_bs[bipart]);
 	//cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
       }
     }
@@ -696,7 +697,7 @@ int main(int argc, char** argv)
     
     cout << "building trees!" << endl;
     for (unsigned numOut=0; numOut<numOutputTrees; ++numOut) {
-      if (numOut % 10 == 0)
+      if (numOut % 1000 == 0)
 	cout << numOut << endl;
       string tree = buildtree(tree_matrix[numOut], lm);
       fout << tree << endl;

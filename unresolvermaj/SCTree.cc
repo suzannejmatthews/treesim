@@ -12,6 +12,9 @@
 
 #include "SCTree.hh"
 #include <iostream>
+#include <stdlib.h>
+#include <sstream>
+#include <iomanip>
 
 SCTree::SCTree()
 {
@@ -116,22 +119,20 @@ SCTree::GetTreeRecurse(
     string distance = "";
 
     if (distances) {
-        double bl = node->GetDistance() / scaleFactor;
-
-        // We don't want to output exponential notation
-        if (bl < 0.0001)
-            distance = "0.0001";
-        else {
-            char buf[32];
-            sprintf(buf, "%f", bl);
-            distance = buf;
-        }
+      //double bl = node->GetDistance() / scaleFactor;
+      double bl = double(rand() % 100000)/1000000;
+      stringstream cv;
+      cv << fixed << setprecision(6) << bl;
+      distance = cv.str();
     }
-
+    double bl = double(rand() % 100000)/1000000;
+    stringstream cv;
+    cv << fixed << setprecision(6) << bl;
+    distance = cv.str();
     if (node->IsLeaf()) {
-//      ret.append(node->name + ":" + distance);
-        ret.append(node->name);
-        return;
+      ret.append(node->name + ":" + distance);
+      //ret.append(node->name);
+      return;
     }
 
     ret += "(";
@@ -190,8 +191,8 @@ SCTree::GetTreeRecurse(
         ret = ret + buf;
     }
 
-//  ret = ret + ":" + distance;
-    ret = ret;
+  ret = ret + ":" + distance;
+  //ret = ret;
 }
 
 
