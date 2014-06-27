@@ -1,5 +1,5 @@
 
-AC_INIT(unresolvermaj, 1.0.0, sulsj@cs.tamu.edu)
+AC_INIT(treesim, 1.0.0, suzanne.matthews@usma.edu)
 AM_INIT_AUTOMAKE(treesim, 1.0.0)
 AM_CONFIG_HEADER(config.hh)
 
