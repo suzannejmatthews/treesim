@@ -103,9 +103,9 @@ vector<int> pickChildren(unsigned int pick, unsigned int numChildren) {
   return vec_r;
 }
 
-void add_internal_node(SCNode * node, SCTree *sctree, string label, vector<int> vec_r, unsigned int numChildren){
+void add_internal_node(SCNode * node, SCTree *sctree, string label, vector<int> vec_r, unsigned int numChildren, vector<SCNode *> &vec_trashcan_SCNODEp){
   SCNode* intNodeA = new SCNode();
-  //vec_trashcan_SCNODEp.push_back(intNodeA);
+  vec_trashcan_SCNODEp.push_back(intNodeA);
   intNodeA->name = label;
       
   // Add the new internal node in nodelist of the node
@@ -155,7 +155,7 @@ void add_internal_node(SCNode * node, SCTree *sctree, string label, vector<int> 
 
 }
 
-void dfs_resolve_one(SCNode* node, SCTree* sctree) {
+void dfs_resolve_one(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
 
   if (node == NULL) return; 
   //newly added shortcut: if the child is named intX, we know that it is binary already.
@@ -168,7 +168,7 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree) {
   if (numChildren != 0) { //if this node is not a leaf
     //cout << "i am not a leaf... recursing" << endl; //printing
     for (unsigned i=0; i<numChildren; ++i) {
-      dfs_resolve_one(node->children[i], sctree); //recursively call the procedure until we hit a leaf node
+      dfs_resolve_one(node->children[i], sctree, trashcan); //recursively call the procedure until we hit a leaf node
     }
 
     //cout << "out of recusion! my name is:" << node->name << endl;
@@ -179,7 +179,7 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree) {
       //printing
 
       vector<int> vec_r = pickChildren(2, numChildren); //pick two random children
-      add_internal_node(node, sctree, "intX", vec_r, numChildren); //make a new internal node, dangling children off it
+      add_internal_node(node, sctree, "intX", vec_r, numChildren, trashcan); //make a new internal node, dangling children off it
       
       //printing      
       //printing
@@ -195,14 +195,14 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree) {
 	first = numChildren-1; //either way, it will result in 1 child on one side, and n-1 children on the other
       vector<int> vec_r = pickChildren(first, numChildren);
       if (first != numChildren-1){ //that means the number is between 2 .. numChildren -2; so create two internal nodes
-	add_internal_node(node, sctree, "intA", vec_r, numChildren); //make a new internal node, dangling children off it
+	add_internal_node(node, sctree, "intA", vec_r, numChildren, trashcan); //make a new internal node, dangling children off it
 	assert(node->NumChildren() == numChildren-first+1);
 	vec_r.clear(); // we are going to add the remainder of the nodes to intB
-	add_internal_node(node, sctree, "intB", vec_r, numChildren); //make a new internal node, dangling remainder of children off it
+	add_internal_node(node, sctree, "intB", vec_r, numChildren, trashcan); //make a new internal node, dangling remainder of children off it
 	
       }
       else{//create one new internal node
-	add_internal_node(node, sctree, "intY", vec_r, numChildren); //make a new internal node, dangling n-1 children off it
+	add_internal_node(node, sctree, "intY", vec_r, numChildren, trashcan); //make a new internal node, dangling n-1 children off it
       }
 
       assert(node->NumChildren() == 2);
@@ -222,10 +222,10 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree) {
       //printing      
       
       if (node->children[0]->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
-	dfs_resolve_one(node->children[0], sctree); //recursively call the procedure until we hit a leaf node
+	dfs_resolve_one(node->children[0], sctree, trashcan); //recursively call the procedure until we hit a leaf node
       }
       if (node->children[1]->NumChildren() > 2){
-	dfs_resolve_one(node->children[1], sctree); //recursively call the procedure until we hit a leaf node
+	dfs_resolve_one(node->children[1], sctree, trashcan); //recursively call the procedure until we hit a leaf node
       }
     } // end numchildren greater than 3
     //cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl; //printing
@@ -322,6 +322,9 @@ vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
 string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_TAXA){
   multimap<unsigned, unsigned, greater<unsigned> > mmap_cluster;
   vector<vector<SCNode*> > vvec_distinctClusters2;
+  vector<SCNode*> vec_trashcan_SCNODEp;
+  vector<string> vec_trashcan_STRING;
+
   //cout << "selected bipartitions:" << endl;
   for (unsigned i=0; i<vec_bs_selected.size(); ++i) {
     vector<SCNode*> vec_nodes2;
@@ -332,6 +335,7 @@ string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_T
 	aNode->name = lm.name(j);
 	//cout << aNode->name << ",";
 	vec_nodes2.push_back(aNode);
+	vec_trashcan_SCNODEp.push_back(aNode);
       }
     }
     //cout << "}" << endl;
@@ -392,6 +396,7 @@ string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_T
       // 2. --------------------------------------------------------------------------
       string newIntNodeName = "int" + itostr(intNodeNum, 10);
       SCNode* newIntNode = new SCNode();
+      vec_trashcan_SCNODEp.push_back(newIntNode);
       newIntNode->name = newIntNodeName;
       newIntNode->parent = theParent;
       
@@ -429,17 +434,24 @@ string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_T
     
   }
   //cout << "tree before resolving:" << scTree->GetTreeString() << endl;
-  dfs_resolve_one(scTree->root, scTree);
+  dfs_resolve_one(scTree->root, scTree, vec_trashcan_SCNODEp);
   string tree = scTree-> GetTreeString(); 
   //cout << "tree after resolving:" << tree << endl;
-  //clean up
-  scTree->DeleteAllNodes();
-  
-  mmap_cluster.clear();
-  for (unsigned i=0; i<vvec_distinctClusters2.size(); ++i)
-    vvec_distinctClusters2[i].clear();
-  vvec_distinctClusters2.clear();
 
+  //clean up    
+  for (unsigned i=0; i<vec_trashcan_SCNODEp.size(); ++i) { //empty node trashcan
+    if (vec_trashcan_SCNODEp[i]){ 
+      delete vec_trashcan_SCNODEp[i];
+    }
+  }
+  if (scTree->root){
+    SCNode *tmp = scTree -> root;
+    delete tmp;
+    scTree->root = NULL;
+  }
+  scTree->nodelist.clear();
+  scTree->parentlist2.clear();
+  delete scTree;
   //return the tree
   return tree;
 }
@@ -580,11 +592,11 @@ int main(int argc, char** argv)
 
     //select r% of the bipartitions at random
     vector<unsigned int> vec_random = genRandomNums(majority_resolution_rate, total_BPs);
-    cout << "printing out random numbers:" << endl;
-    for (unsigned int i = 0; i < vec_random.size(); i++){
-      cout << vec_random[i] << " ";
-    }
-    cout << endl;
+    //cout << "printing out random numbers:" << endl;
+    //for (unsigned int i = 0; i < vec_random.size(); i++){
+    //  cout << vec_random[i] << " ";
+    //}
+    //cout << endl;
     cout << "Requested Majority Rate=" << majRate << endl;
     cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
     cout << "Requested Strict Rate=" << strictRate << endl;
@@ -633,9 +645,17 @@ int main(int argc, char** argv)
 	cout << numOut << endl;
       string tree = buildtree(tree_matrix[numOut], lm, NUM_TAXA);
       fout << tree << endl;
+      //tree_matrix[numOut].clear(); //remove the bipartitions from this
     }
     fout.close();
 
+    //clean up
+    for (unsigned int i = 0; i < vec_bs.size(); i++){
+      if (vec_bs[i]!=NULL){
+	delete [] vec_bs[i];
+	vec_bs[i] = NULL;
+      }
+    }
     // CPU time comsumed
     struct rusage a;
     if (getrusage(RUSAGE_SELF,&a) == -1) {
