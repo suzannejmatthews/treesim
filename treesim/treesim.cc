@@ -8,6 +8,7 @@ treesim
     and majority consensus rate.
 
     Based on the software unresolverstr and unresolvermaj by SeungJin Sul
+    and TreeZip by Suzanne J. Matthews
 
     AUTHOR:
         Copyright (C) 2014 Suzanne J. Matthews
@@ -36,12 +37,8 @@ treesim
 //      MA 02110-1301, USA.
 
 
-//classes from unresolverstr and unresolvermaj 
-//#include "hashfunc.hh"
-//#include "hashmap.hh"
-
-#include "SCTree.hh"
-#include "SCNode.hh"
+#include "SCTree.h"
+#include "SCNode.h"
 
 // From Split-Dist
 #include "label-map.hh"
@@ -58,25 +55,8 @@ extern "C" {
 
 #include <iostream>
 #include <./tclap/CmdLine.h>
-//#include <tclap/CmdLine.h>
 
 using namespace std;
-//#define LEFT                            0
-//#define RIGHT                           1
-//#define ROOT                            2
-
-// Set a random number for m1 (= Initial size of hash table)
-// m1 is the closest value to (t*n)+(t*n*HASHTABLE_FACTOR)
-//#define HASHTABLE_FACTOR                0.2
-
-// if double collision is reported, increase this!
-// the c value of m2 > c*t*n in the paper
-//static unsigned long C                   = 1000;
-
-//static const double MAX_COLLISION_CHANCE  = 1e-6; // chance of collision
-//static unsigned         NUM_TREES        = 0;    // Number of trees
-//static unsigned         NUM_TAXA         = 0;    // Number of taxa
-
 
 void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) {
   if (node->Nchildren == 0) {
@@ -155,7 +135,7 @@ void add_internal_node(SCNode * node, SCTree *sctree, string label, vector<int> 
 
 }
 
-void dfs_resolve_one(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
+void resolve_tree(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
 
   if (node == NULL) return; 
   //newly added shortcut: if the child is named intX, we know that it is binary already.
@@ -168,7 +148,7 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
   if (numChildren != 0) { //if this node is not a leaf
     //cout << "i am not a leaf... recursing" << endl; //printing
     for (unsigned i=0; i<numChildren; ++i) {
-      dfs_resolve_one(node->children[i], sctree, trashcan); //recursively call the procedure until we hit a leaf node
+      resolve_tree(node->children[i], sctree, trashcan); //recursively call the procedure until we hit a leaf node
     }
 
     //cout << "out of recusion! my name is:" << node->name << endl;
@@ -222,10 +202,10 @@ void dfs_resolve_one(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
       //printing      
       
       if (node->children[0]->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
-	dfs_resolve_one(node->children[0], sctree, trashcan); //recursively call the procedure until we hit a leaf node
+	resolve_tree(node->children[0], sctree, trashcan); //recursively call the procedure until we hit a leaf node
       }
       if (node->children[1]->NumChildren() > 2){
-	dfs_resolve_one(node->children[1], sctree, trashcan); //recursively call the procedure until we hit a leaf node
+	resolve_tree(node->children[1], sctree, trashcan); //recursively call the procedure until we hit a leaf node
       }
     } // end numchildren greater than 3
     //cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl; //printing
@@ -434,8 +414,8 @@ string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_T
     
   }
   //cout << "tree before resolving:" << scTree->GetTreeString() << endl;
-  dfs_resolve_one(scTree->root, scTree, vec_trashcan_SCNODEp);
-  string tree = scTree-> GetTreeString(); 
+  resolve_tree(scTree->root, scTree, vec_trashcan_SCNODEp);
+  string tree = scTree-> GetTreeString(true); 
   //cout << "tree after resolving:" << tree << endl;
 
   //clean up    
@@ -458,10 +438,9 @@ string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_T
 
 int main(int argc, char** argv)
 {
-    string outfilename;
-    float majRate = 0.0, strictRate = 0.0;
-    unsigned int NUM_TAXA = 0, NUM_TREES = 0;
- 
+  string outfilename, startingFile;
+  float majRate = 0.0, strictRate = 0.0;
+  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0;
 
     // TCLAP
     try {
@@ -502,11 +481,20 @@ int main(int argc, char** argv)
         TCLAP::ValueArg<string> outfileArg("o", "outfile", "Output file name", false, "output.tre", "Output file name");
         cmd.add( outfileArg );
 
+	TCLAP::ValueArg<string> sfileArg("t", "startingtree", "starting tree file name", false, "starting.tre", "input starting tree file name");
+        cmd.add( sfileArg );
+
+	TCLAP::ValueArg<int> uArg("u", "uniquetree", "number of unique trees", false, 0, "number of unique trees in file");
+        cmd.add( uArg );
+
+
         cmd.parse( argc, argv );
 	NUM_TAXA = numtaxaArg.getValue();
         NUM_TREES = numtreeArg.getValue();
         strictRate = sRateArg.getValue();
 	majRate = mRateArg.getValue();
+	unique_trees = uArg.getValue();
+
 	if (strictRate > 1 || strictRate < 0){
 	  cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
 	  return 1;
@@ -520,42 +508,64 @@ int main(int argc, char** argv)
 	  return 1;
 	}
         outfilename = outfileArg.getValue();
-	
+	startingFile = sfileArg.getValue();
     } catch (TCLAP::ArgException &e) { // catch any exceptions
         cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
     }
 
+
     //generate a random tree with the specified number of taxa
-    fprintf(stderr, "Generating a random tree with %u taxa...\n", NUM_TAXA);
-    vector<bool *> random_tree_bs;
-    LabelMap lm;
-
-
-    bool * star = new bool[NUM_TAXA];
-    for (unsigned int i = 0; i < NUM_TAXA; i++){
-      star[i] = 1;
-      string taxa;
-      stringstream ss;
-      ss << i+1;
-      ss >> taxa;
-      lm.push(taxa);
+   LabelMap lm;
+   ofstream fout;
+   NEWICKTREE *newickTree;
+   int err;
+   FILE *fp;
+    if (startingFile == "starting.tre"){
+      cout << "We get here!" << endl;
+      fprintf(stderr, "Generating a random tree with %u taxa...\n", NUM_TAXA);
+      vector<bool *> random_tree_bs;
+      bool * star = new bool[NUM_TAXA];
+      for (unsigned int i = 0; i < NUM_TAXA; i++){
+	star[i] = 1;
+	string taxa;
+	stringstream ss;
+	ss << i+1;
+	ss >> taxa;
+	lm.push(taxa);
+      }
+      random_tree_bs.push_back(star);
+      string random_tree = buildtree(random_tree_bs, lm, NUM_TAXA); 
+      fout.open("starting.tre");
+      fout << random_tree << endl;
+      fout.close();
+      fprintf(stderr, "Done. starting tree outputted to starting.tre.\n");
+      random_tree_bs.clear();
+      delete [] star;
     }
-    random_tree_bs.push_back(star);
-    string random_tree = buildtree(random_tree_bs, lm, NUM_TAXA); 
-    ofstream fout;
-    fout.open("starting.tre");
-    fout << random_tree << endl;
-    fout.close();
-    fprintf(stderr, "Done. starting tree outputted to starting.tre.\n");
-    random_tree_bs.clear();
-    delete [] star;
-
+    else{
+      //collect label map from file
+      cout << "getting labels from file: " << startingFile << endl;
+      fp = fopen(startingFile.c_str(), "r");
+      if (!fp){
+        cout << "ERROR: file open error:" << argv[1] << endl;
+        exit(0);
+      }
+      newickTree = loadnewicktree2(fp, &err);
+      if(!newickTree) {
+	print_error(err);
+      }
+      else{
+	GetTaxaLabels2(newickTree->root, lm);
+	killnewicktree(newickTree);
+	fclose(fp);
+      }
+      assert(NUM_TAXA == lm.size());
+    }
     fprintf(stderr, "Building Collection...\n");
-    NEWICKTREE *newickTree;
-    int err;
-    FILE *fp;
+ 
+
     vector<bool *> vec_bs;
-    fp = fopen("starting.tre", "r");
+    fp = fopen(startingFile.c_str(), "r");
     if(!fp) {
         cout << "ERROR: file open error:" << argv[1] << endl;
         exit(0);
@@ -572,13 +582,6 @@ int main(int argc, char** argv)
 
     fclose(fp);
 
-    /*cout << "Collected bipartitions:" << endl;
-    for (unsigned int i= 0; i < vec_bs.size(); i++){
-      for (unsigned int j = 0; j < NUM_TAXA; j++){
-	cout << vec_bs[i][j];
-      }
-      cout << endl;
-      }*/
     unsigned int total_BPs = vec_bs.size()-1;
     unsigned int majority_resolution_rate = int(total_BPs*majRate);
     unsigned int strict_resolution_rate = int(total_BPs*strictRate);
@@ -601,14 +604,26 @@ int main(int argc, char** argv)
     cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
     cout << "Requested Strict Rate=" << strictRate << endl;
     cout << "Attempted Strict Rate=" << float(strict_resolution_rate)/total_BPs << endl;    
-
     //generate t vectors of vectors (n x t)
     vector< vector<bool*> > tree_matrix;
-    tree_matrix.resize(NUM_TREES);
+    vector<unsigned int> duplicates;
+    unsigned int NUM_TO_BUILD = 0;
+    if (unique_trees == 0){ //if this parameter is not specfied
+      NUM_TO_BUILD = NUM_TREES;
+    }
+    else{
+      assert(unique_trees < NUM_TREES);
+      assert(unique_trees > 0);
+      NUM_TO_BUILD = unique_trees;
+      duplicates = genRandomNums(NUM_TREES-unique_trees, NUM_TREES);
+      sort(duplicates.begin(), duplicates.end()); //sort the duplicates vector
+    }
+    //tree_matrix.resize(NUM_TREES);
+    tree_matrix.resize(NUM_TO_BUILD);
     for (unsigned int i = 0; i < strict_resolution_rate; i++){
       //cout << "adding bipartition " << vec_random[i] << "to all the trees" << endl;
       unsigned int bipart = vec_random[i];
-      for (unsigned int j = 0; j < NUM_TREES; j++){
+      for (unsigned int j = 0; j < NUM_TO_BUILD; j++){
 	tree_matrix[j].push_back(vec_bs[bipart]);
       }
     }
@@ -616,11 +631,11 @@ int main(int argc, char** argv)
     //for each of the remainder of the selected bipartitions:
     for (unsigned int i = strict_resolution_rate; i < vec_random.size(); i++){
       unsigned int bipart = vec_random[i];
-      unsigned int perc = rand() % 50 + 50; // generate a random number between 50 .. 100
+      unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
       //cout << "Adding bipartition: " << vec_random[i] << " to " << perc << "% of the trees" << endl;
-      perc = int((float(perc)/100) * NUM_TREES);
+      perc = int((float(perc)/100) * NUM_TO_BUILD);
       //cout << "perc will actually be: " << perc << endl;
-      vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TREES);
+      vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TO_BUILD);
       for (unsigned int j = 0; j < selected_trees.size(); j++){
 	unsigned int tree_id = selected_trees[j];
 	tree_matrix[tree_id].push_back(vec_bs[bipart]);
@@ -629,7 +644,7 @@ int main(int argc, char** argv)
     }
 
     //add the star bipartition to all the trees
-    for (unsigned int i = 0; i < NUM_TREES; i++)
+    for (unsigned int i = 0; i < NUM_TO_BUILD; i++)
       tree_matrix[i].push_back(vec_bs[total_BPs]);
 
     //commence building
@@ -640,11 +655,16 @@ int main(int argc, char** argv)
       fout.open("output.tre");
     
     cout << "building trees!" << endl;
-    for (unsigned numOut=0; numOut<NUM_TREES; ++numOut) {
+    unsigned int dupCount = 0;
+    for (unsigned numOut=0; numOut<NUM_TO_BUILD; ++numOut) {
       if (numOut % 1000 == 0)
 	cout << numOut << endl;
       string tree = buildtree(tree_matrix[numOut], lm, NUM_TAXA);
       fout << tree << endl;
+      if (unique_trees != 0 && numOut == duplicates[dupCount]){
+	fout << tree << endl;
+	dupCount++;
+      }
       //tree_matrix[numOut].clear(); //remove the bipartitions from this
     }
     fout.close();

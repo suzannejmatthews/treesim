@@ -1,9 +1,8 @@
 
 #AM_CXXFLAGS = -static
-AM_CXXFLAGS = -Wall
+AM_CXXFLAGS = -Wall -g
 #CXXFLAGS += -O3 -pg
-#CXXFLAGS += -g
-AM_CXXFLAGS += -O3 -fexpensive-optimizations
+#AM_CXXFLAGS += -O3 -fexpensive-optimizations
 
 #AM_CXXFLAGS += -DNDEBUG
 

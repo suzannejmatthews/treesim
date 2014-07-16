@@ -1,114 +1,120 @@
-///*****************************************************/
-//
-// Copyright (C) 2006, 2007 Seung-Jin Sul
-//      Department of Computer Science
-//      Texas A&M University
-//      Contact: sulsj@cs.tamu.edu
-//
-//      CLASS DEFINITION
-//      HashMap: Class for hashing
-//
-///*****************************************************/
+/*
+This file is part of TreeZip.
 
-#include "SCTree.hh"
-#include "SCNode.hh"
+TreeZip is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+TreeZip is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with TreeZip.  If not, see <http://www.gnu.org/licenses/>.
+
+*/
+
+
+
+#include "SCTree.h"
+#include "SCNode.h"
 #include <iostream>
 #include <cassert>
 
 SCNode::SCNode()
 {
-    parent = NULL;
-    ClearChildren();
-
-    support = 0;
+	parent = NULL;
+	ClearChildren();
+	
+	support = 0;
 }
 
 
 SCNode::~SCNode()
 {
-    // Delete Nodes in the Tree
-//  for (unsigned i = 0; i < children.size(); ++i) {
-//      if (children[i] != NULL) {
-//          delete children[i];
-//          children[i] = NULL;
-//      }
-//  }
+	// Delete Nodes in the Tree
+//	for (unsigned int i = 0; i < children.size(); ++i) {
+//		if (children[i] != NULL) {		
+//			delete children[i];
+//			children[i] = NULL;
+//		}
+//	}
 }
 
 
-void
+void 
 SCNode::ClearChildren()
-{
-    for (unsigned i=0 ; i < children.size(); ++i)
-        children[i] = NULL;
+{	
+	for (unsigned int i=0 ; i < children.size(); ++i)
+		children[i] = NULL;	
 }
 
 
 
-unsigned
+unsigned int
 SCNode::NumChildren()
 {
-
-    unsigned cnt=0;
-    for (unsigned i=0; i<children.size(); ++i)
-        if (children[i] != NULL) cnt++;
-
-    return cnt;
-
+	
+	unsigned int cnt=0;
+	for (unsigned int i=0; i<children.size(); ++i)
+		if (children[i] != NULL) cnt++;
+	
+	return cnt;
+	
 }
 
 
-void
+void 
 SCNode::SetDistance(double distance)
 {
-    // One of manu's datasets gives us intermediate negative bl
-    if (distance < 0)
-        bl = 0.0;
-    else
-        bl = distance;
+	// One of manu's datasets gives us intermediate negative bl
+	if (distance < 0)
+		bl = 0.0;
+	else
+		bl = distance;
 }
 
-double
+double 
 SCNode::GetDistance() const
 {
-    return bl;
+	return bl;
 }
 
 
 void SCNode::DrawOnTerminal(int dp, bool distances)
 {
-    int i = 0;
+	int i = 0;
+	
+	while (i < dp) {
+		cout << "    ";
+		++i;
+	}
 
-    while (i < dp) {
-        cout << "    ";
-        ++i;
-    }
+	cout << name;
+	
+//	if (support)
+//		cout << " (" << support << ")";
 
-    cout << name;
+	if (distances)
+		cout << " " << bl;
+	
+	cout << endl;
 
-//  if (support)
-//      cout << " (" << support << ")";
-
-//  if (distances)
-//      cout << " " << bl;
-
-    cout << endl;
-
-    for (unsigned i = 0; i < NumChildren(); ++i)
-        children[i]->DrawOnTerminal(dp + 1, distances);
+	for (unsigned int i = 0; i < NumChildren(); ++i)
+		children[i]->DrawOnTerminal(dp + 1, distances);
 }
 
-bool
+bool 
 SCNode::IsRoot()
 {
-    return (parent == NULL);
+	return (parent == NULL);
 }
 
-bool
+bool 
 SCNode::IsLeaf()
 {
-//  assert(children[2] == NULL);
-//  return (children[0] == NULL && children[1] == NULL);
-    return (NumChildren() == 0);
+	return (NumChildren() == 0);
 }
 
