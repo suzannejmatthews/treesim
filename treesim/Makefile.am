@@ -1,8 +1,7 @@
 
-#AM_CXXFLAGS = -static
-AM_CXXFLAGS = -Wall -g
+AM_CXXFLAGS = -static -Wall
 #CXXFLAGS += -O3 -pg
-#AM_CXXFLAGS += -O3 -fexpensive-optimizations
+AM_CXXFLAGS += -O3 -fexpensive-optimizations
 
 #AM_CXXFLAGS += -DNDEBUG
 
@@ -17,11 +16,13 @@ treesim_SOURCES =
 
 # From Split-Dist
 treesim_SOURCES += label-map.hh label-map.cc
+treesim_SOURCES += newick.h newick.c
 
 # For Consensus tree
-treesim_SOURCES += SCNode.cc SCTree.cc
+treesim_SOURCES += SNode.h SCNode.cc
+treesim_SOURCES += SCTree.h SCTree.cc
+treesim_SOURCES += buildtree.h buildtree.cc
 
-treesim_SOURCES += newick.h newick.c
 
 # Main
 treesim_SOURCES += treesim.cc

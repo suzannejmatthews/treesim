@@ -42,6 +42,7 @@ treesim
 
 // From Split-Dist
 #include "label-map.hh"
+#include "buildtree.h"
 
 #include <cassert>
 #include <sys/time.h>
@@ -65,151 +66,6 @@ void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) {
   } else
     for(int i=0; i<node->Nchildren; ++i)
       GetTaxaLabels2(node->child[i], lm);
-}
-
-vector<int> pickChildren(unsigned int pick, unsigned int numChildren) {
-  vector<int> vec_r;
-  unsigned int ir;
-  for (unsigned int i = 0; i < pick; ++i) {
-    ir = rand() % numChildren;
-    if (find(vec_r.begin(), vec_r.end(), ir) != vec_r.end()) {
-      --i;
-      continue;
-    }
-    vec_r.push_back(ir);
-  }
-  for (unsigned int i = 0; i < vec_r.size(); i++)
-    assert(vec_r[i] >= 0);
-  return vec_r;
-}
-
-void add_internal_node(SCNode * node, SCTree *sctree, string label, vector<int> vec_r, unsigned int numChildren, vector<SCNode *> &vec_trashcan_SCNODEp){
-  SCNode* intNodeA = new SCNode();
-  vec_trashcan_SCNODEp.push_back(intNodeA);
-  intNodeA->name = label;
-      
-  // Add the new internal node in nodelist of the node
-  sctree->nodelist.push_back(intNodeA);
-
-  // dangle selected children as children of the new
-  // internal node
-  if (vec_r.size() != 0){
-    random_shuffle(vec_r.begin(), vec_r.end());
-    for (unsigned int i = 0; i < vec_r.size(); i++){
-      node->children[vec_r[i]]->parent = intNodeA;
-      intNodeA->children.push_back(node->children[vec_r[i]]);
-      // remove the moved children from the nodelist in the node
-      node->children[vec_r[i]] = NULL;
-      assert(intNodeA->children[i]->parent == intNodeA);
-    }        
-    
-    assert(intNodeA->NumChildren() == vec_r.size());
-      
-    // update the original node
-    assert(node->NumChildren() == numChildren - vec_r.size());
-  }
-  else{
-    unsigned int count = 0;
-    for (unsigned int i=0; i<node->children.size(); ++i) {
-      if (node->children[i] == NULL || node->children[i]->name == "intA")
-	continue;
-      node->children[i]->parent = intNodeA;
-      intNodeA->children.push_back(node->children[i]);
-      node->children[i] = NULL;
-      assert(intNodeA->children[count]->parent == intNodeA);
-      count++;
-    }
-  }
-  assert(intNodeA != NULL);
-      
-  vector<SCNode*> vec_temp = node->children;
-  vec_temp.push_back(intNodeA);
-  node->children.clear();
-      
-  for (unsigned j=0; j<vec_temp.size(); ++j) {
-    if (vec_temp[j] != NULL) node->children.push_back(vec_temp[j]);
-  }
-      
-  // update the new internal nodes
-  intNodeA->parent = node;
-
-}
-
-void resolve_tree(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
-
-  if (node == NULL) return; 
-  //newly added shortcut: if the child is named intX, we know that it is binary already.
-  if (node->name == "intX") return;   
-
-  unsigned numChildren = node->NumChildren();
-  //cout << "hello! my name is: " << node->name << endl; //printing
-
-  // if numChildren > 2, make subtree into a binary tree
-  if (numChildren != 0) { //if this node is not a leaf
-    //cout << "i am not a leaf... recursing" << endl; //printing
-    for (unsigned i=0; i<numChildren; ++i) {
-      resolve_tree(node->children[i], sctree, trashcan); //recursively call the procedure until we hit a leaf node
-    }
-
-    //cout << "out of recusion! my name is:" << node->name << endl;
-    if (numChildren == 3) {
-
-      //printing
-
-      //printing
-
-      vector<int> vec_r = pickChildren(2, numChildren); //pick two random children
-      add_internal_node(node, sctree, "intX", vec_r, numChildren, trashcan); //make a new internal node, dangling children off it
-      
-      //printing      
-      //printing
-
-    } //end if numChildren == 3
-    else if (numChildren > 3) {
-      //printing
-
-      //printing
-
-      unsigned int first = rand() % (numChildren-1) + 1; 
-      if (first ==1) 
-	first = numChildren-1; //either way, it will result in 1 child on one side, and n-1 children on the other
-      vector<int> vec_r = pickChildren(first, numChildren);
-      if (first != numChildren-1){ //that means the number is between 2 .. numChildren -2; so create two internal nodes
-	add_internal_node(node, sctree, "intA", vec_r, numChildren, trashcan); //make a new internal node, dangling children off it
-	assert(node->NumChildren() == numChildren-first+1);
-	vec_r.clear(); // we are going to add the remainder of the nodes to intB
-	add_internal_node(node, sctree, "intB", vec_r, numChildren, trashcan); //make a new internal node, dangling remainder of children off it
-	
-      }
-      else{//create one new internal node
-	add_internal_node(node, sctree, "intY", vec_r, numChildren, trashcan); //make a new internal node, dangling n-1 children off it
-      }
-
-      assert(node->NumChildren() == 2);
-      assert(node->children[0] != NULL);
-      assert(node->children[1] != NULL);
-      if (first != numChildren - 1){
-	assert(node->children[1]->NumChildren() == numChildren-first);  
-      }
-      else{
-	assert(node->children[1]->NumChildren() == first);  
-      }
-      // update the new internal nodes
-
-
-      //printing      
-
-      //printing      
-      
-      if (node->children[0]->NumChildren() > 2){ //add this check to recursively resolve anytime B contains more than 2 nodes
-	resolve_tree(node->children[0], sctree, trashcan); //recursively call the procedure until we hit a leaf node
-      }
-      if (node->children[1]->NumChildren() > 2){
-	resolve_tree(node->children[1], sctree, trashcan); //recursively call the procedure until we hit a leaf node
-      }
-    } // end numchildren greater than 3
-    //cout << "I have " << node->NumChildren()  << " children. My name is: " << node->name << ". Exiting recusion!" << endl; //printing
-  } //end num children greater than 0
 }
 
 
@@ -246,29 +102,6 @@ bool * collect_biparts(NEWICKNODE* startNode, LabelMap &lm, unsigned treeIdx, ve
   }
 }
 
-//itostr: from unresolvermaj
-string itostr(int value, int base){
-  enum { kMaxDigits = 5 };
-  std::string buf;
-  buf.reserve(kMaxDigits); // Pre-allocate enough space.
-  
-  // check that the base if valid
-  if (base < 2 || base > 16) return buf;
-  int quotient = value;
-  
-  // Translating number to string with base:
-  do {
-    buf += "0123456789abcdef"[std::abs(quotient % base)];
-    quotient /= base;
-  } while (quotient);
-  
-  // Append the negative sign for base 10
-  if (value < 0 && base == 10) buf += '-';
-  
-  std::reverse(buf.begin(), buf.end());
-  
-  return buf;
-}
 
 void print_error(int err){
   switch(err) {
@@ -297,143 +130,6 @@ vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
     vec_rand.push_back(ir);
   }
   return vec_rand;
-}
-
-string buildtree(vector<bool *> vec_bs_selected, LabelMap lm, unsigned int NUM_TAXA){
-  multimap<unsigned, unsigned, greater<unsigned> > mmap_cluster;
-  vector<vector<SCNode*> > vvec_distinctClusters2;
-  vector<SCNode*> vec_trashcan_SCNODEp;
-  vector<string> vec_trashcan_STRING;
-
-  //cout << "selected bipartitions:" << endl;
-  for (unsigned i=0; i<vec_bs_selected.size(); ++i) {
-    vector<SCNode*> vec_nodes2;
-    //cout << "{";
-    for (unsigned j=0; j<NUM_TAXA; ++j) {
-      if ((vec_bs_selected[i])[j]) {
-	SCNode* aNode = new SCNode();
-	aNode->name = lm.name(j);
-	//cout << aNode->name << ",";
-	vec_nodes2.push_back(aNode);
-	vec_trashcan_SCNODEp.push_back(aNode);
-      }
-    }
-    //cout << "}" << endl;
-    vvec_distinctClusters2.push_back(vec_nodes2);
-  }
-  //cout << endl;
-  vec_bs_selected.clear();
-  
-  // Insert the size of distict vector and the index
-  // To sort the distinct vectors by the size of clusters
-  for (unsigned i=0; i<vvec_distinctClusters2.size(); ++i)
-    mmap_cluster.insert(multimap<unsigned,unsigned>::value_type(vvec_distinctClusters2[i].size(), i));
-  
-  //////////////////////////////////////////////////////////////////////////////
-  // 09.19.2007
-  // Construct SC tree
-  //////////////////////////////////////////////////////////////////////////////
-  multimap<unsigned,unsigned>::iterator itr;
-  SCTree *scTree = new SCTree();
-  bool addedRoot=false;
-  unsigned intNodeNum = 0;
-
-  
-  for (itr=mmap_cluster.begin(); itr!=mmap_cluster.end(); ++itr) {
-    if (!addedRoot) {
-      // The first cluster has all the taxa.
-      // This constructs a star tree with all the taxa.
-      // 1. Dangle all the taxa as root's children by adjusting parent link.
-      // 2. Push all the node* in the root's children
-      // 3. Push all the nodes in the tree's nodelist.
-      // 4. Push all the nodes' parent in the tree's parentlist.
-      
-      for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
-	vvec_distinctClusters2[itr->second][i]->parent = scTree->root;
-	scTree->root->children.push_back(vvec_distinctClusters2[itr->second][i]);
-	scTree->nodelist.push_back(vvec_distinctClusters2[itr->second][i]);
-	assert(scTree->nodelist[0]->name == "root");
-	scTree->parentlist2.insert(map<string,int>::value_type(vvec_distinctClusters2[itr->second][i]->name, 0));
-      }
-      addedRoot = true;
-    } else {
-      // For the next biggest cluster,
-      // 1. Find node list to move (= vvec_distinctClusters2[itr->second]) and
-      //    Get the parent node of the to-go nodes.
-      // 2. Make an internal node.
-      // 3. Insert the node in the nodelist of the tree and update the parentlist accordingly
-      // 4. Adjust the to-go nodes' parent link.
-      // 5. Adjust the parent node's link to children (delete the moved nodes from children).
-      
-      
-      // 1. --------------------------------------------------------------------------
-      SCNode* theParent = NULL;
-      theParent = scTree->nodelist[scTree->parentlist2[vvec_distinctClusters2[itr->second][0]->name]];
-      
-      assert(theParent != NULL);
-      assert(theParent->name != "");
-      
-      // 2. --------------------------------------------------------------------------
-      string newIntNodeName = "int" + itostr(intNodeNum, 10);
-      SCNode* newIntNode = new SCNode();
-      vec_trashcan_SCNODEp.push_back(newIntNode);
-      newIntNode->name = newIntNodeName;
-      newIntNode->parent = theParent;
-      
-      // 3. --------------------------------------------------------------------------
-      assert(newIntNodeName.size() != 0);
-      scTree->nodelist.push_back(newIntNode);
-      assert(scTree->nodelist[scTree->nodelist.size()-1]->name == newIntNode->name);
-      
-      scTree->parentlist2.insert(map<string, unsigned>::value_type(newIntNodeName, scTree->nodelist.size()-1));
-      
-      for (unsigned i=0; i<vvec_distinctClusters2[itr->second].size(); ++i) {
-	// 4. --------------------------------------------------------------------------
-	vvec_distinctClusters2[itr->second][i]->parent = newIntNode;
-	
-	// We have to update parentlist in the tree.
-	assert(vvec_distinctClusters2[itr->second][i]->parent->name == scTree->nodelist[scTree->nodelist.size()-1]->name);
-	
-	scTree->parentlist2[vvec_distinctClusters2[itr->second][i]->name] = scTree->nodelist.size()-1;
-	newIntNode->children.push_back(vvec_distinctClusters2[itr->second][i]);
-	
-	// 5. --------------------------------------------------------------------------
-	// Delete the moved nodes from parent's children.
-	vector<SCNode*>::iterator itr2;
-	
-	for (itr2 = theParent->children.begin(); itr2 != theParent->children.end(); ++itr2) {
-	  if (vvec_distinctClusters2[itr->second][i]->name == (*itr2)->name) {
-	    theParent->children.erase(itr2);
-	    break;
-	  }
-	}
-      }
-      theParent->children.push_back(newIntNode);
-      intNodeNum++;
-    }
-    
-  }
-  //cout << "tree before resolving:" << scTree->GetTreeString() << endl;
-  resolve_tree(scTree->root, scTree, vec_trashcan_SCNODEp);
-  string tree = scTree-> GetTreeString(true); 
-  //cout << "tree after resolving:" << tree << endl;
-
-  //clean up    
-  for (unsigned i=0; i<vec_trashcan_SCNODEp.size(); ++i) { //empty node trashcan
-    if (vec_trashcan_SCNODEp[i]){ 
-      delete vec_trashcan_SCNODEp[i];
-    }
-  }
-  if (scTree->root){
-    SCNode *tmp = scTree -> root;
-    delete tmp;
-    scTree->root = NULL;
-  }
-  scTree->nodelist.clear();
-  scTree->parentlist2.clear();
-  delete scTree;
-  //return the tree
-  return tree;
 }
 
 int main(int argc, char** argv)
@@ -542,7 +238,7 @@ int main(int argc, char** argv)
 	lm.push(taxa);
       }
       random_tree_bs.push_back(star);
-      string random_tree = buildtree(random_tree_bs, lm, NUM_TAXA); 
+      string random_tree = compute_tree(lm, random_tree_bs, NUM_TAXA); 
       fout.open("starting.tre");
       fout << random_tree << endl;
       fout.close();
@@ -603,11 +299,21 @@ int main(int argc, char** argv)
 
     //select r% of the bipartitions at random
     vector<unsigned int> vec_random = genRandomNums(majority_resolution_rate, total_BPs);
-    //cout << "printing out random numbers:" << endl;
-    //for (unsigned int i = 0; i < vec_random.size(); i++){
-    //  cout << vec_random[i] << " ";
-    //}
-    //cout << endl;
+    bool * select;
+    vector<unsigned int> other_biparts;
+    unsigned int place;
+    if (precise){
+      select = (bool*)calloc(total_BPs,sizeof(bool));
+      for (unsigned int i = 0; i < vec_random.size(); i++){
+	place = vec_random[i];
+	select[place]=1;
+      }
+      for (unsigned int i = 0; i < total_BPs; i++){
+	if (select[i] == 0)
+	  other_biparts.push_back(i);
+      }
+      free(select);
+    }
     cout << "Requested Majority Rate=" << majRate << endl;
     cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
     cout << "Requested Strict Rate=" << strictRate << endl;
@@ -667,7 +373,7 @@ int main(int argc, char** argv)
     for (unsigned numOut=0; numOut<NUM_TO_BUILD; ++numOut) {
       if (verbose && numOut % 1000 == 0)
 	cout << numOut << endl;
-      string tree = buildtree(tree_matrix[numOut], lm, NUM_TAXA);
+      string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA);
       fout << tree << endl;
       if (unique_trees != 0 && numOut == duplicates[dupCount]){
 	fout << tree << endl;
