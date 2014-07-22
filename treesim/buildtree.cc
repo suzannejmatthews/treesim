@@ -226,15 +226,13 @@ string compute_tree(
   //update distinct clusters
   for (unsigned int i = 0; i < my_bs.size(); ++i) {
     vector<SCNode*> vec_nodes2;
-    unsigned int lmIndex = 0;
     for (unsigned int j = 0; j < NUM_TAXA; j++) {
       if (my_bs[i][j]) {
 	SCNode* aNode = new SCNode();
-	aNode->name = lm.name(lmIndex);
+	aNode->name = lm.name(j);
 	vec_nodes2.push_back(aNode);
 	vec_garbageCan.push_back(aNode);
       }
-      lmIndex++;
     }
     vvec_distinctClusters2.push_back(vec_nodes2);
   }
