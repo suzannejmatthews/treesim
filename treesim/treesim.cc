@@ -285,11 +285,35 @@ int main(int argc, char** argv)
     }
 
     fclose(fp);
+    unsigned int algType = 0;
+    if (majRate == strictRate && majRate == 0){
+      cout << "Algorithm: Random Collection" << endl;
+      algType = 0;
+    }
+    if (majRate == strictRate && majRate > 0){
+      cout << "Algorithm: Strict Consensus Collection" << endl;
+      algType = 1;
+    }
+    if (majRate > 0 && strictRate == 0){
+      cout << "Algorithm: Majority Consensus Collection" << endl;
+      if (precise)
+	cout << "Precise option: ON" << endl;
+      algType = 2;
+    }
+    if (majRate > 0 && strictRate > 0 && majRate != strictRate){
+      cout << "Algorithm: Combined Consensus Collection" << endl;
+      if (precise)
+	cout << "Precise option: ON" << endl;
+      algType = 3;
+    }
 
     unsigned int total_BPs = vec_bs.size()-1;
     unsigned int majority_resolution_rate = int(total_BPs*majRate);
     unsigned int strict_resolution_rate = int(total_BPs*strictRate);
     unsigned int difference = majority_resolution_rate - strict_resolution_rate;
+    vector<unsigned int> duplicates, vec_random, other_biparts;
+    unsigned int NUM_TO_BUILD = 0;
+    vector< vector<bool*> > tree_matrix;
     cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
     cout << "    Number of Output trees = " << NUM_TREES << endl;
     cout << "    Number of bipartitions that will be in all the trees = " << strict_resolution_rate << endl;
@@ -298,9 +322,8 @@ int main(int argc, char** argv)
     srand(time(NULL)); //seed random number generator
 
     //select r% of the bipartitions at random
-    vector<unsigned int> vec_random = genRandomNums(majority_resolution_rate, total_BPs);
+    vec_random = genRandomNums(majority_resolution_rate, total_BPs);
     bool * select;
-    vector<unsigned int> other_biparts;
     unsigned int place;
     if (precise){
       select = (bool*)calloc(total_BPs,sizeof(bool));
@@ -317,11 +340,10 @@ int main(int argc, char** argv)
     cout << "Requested Majority Rate=" << majRate << endl;
     cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
     cout << "Requested Strict Rate=" << strictRate << endl;
-    cout << "Attempted Strict Rate=" << float(strict_resolution_rate)/total_BPs << endl;    
-    //generate t vectors of vectors (n x t)
-    vector< vector<bool*> > tree_matrix;
-    vector<unsigned int> duplicates;
-    unsigned int NUM_TO_BUILD = 0;
+    cout << "Attempted Strict Rate=" << float(strict_resolution_rate)/total_BPs << endl;  
+    
+    //generate duplicates, if needed
+    
     if (unique_trees == 0){ //if this parameter is not specfied
       NUM_TO_BUILD = NUM_TREES;
     }
@@ -332,7 +354,8 @@ int main(int argc, char** argv)
       duplicates = genRandomNums(NUM_TREES-unique_trees, NUM_TREES);
       sort(duplicates.begin(), duplicates.end()); //sort the duplicates vector
     }
-    //tree_matrix.resize(NUM_TREES);
+
+    //generate t vectors of vectors (n x t)
     tree_matrix.resize(NUM_TO_BUILD);
     for (unsigned int i = 0; i < strict_resolution_rate; i++){
       //cout << "adding bipartition " << vec_random[i] << "to all the trees" << endl;
@@ -342,7 +365,7 @@ int main(int argc, char** argv)
       }
     }
 
-    //for each of the remainder of the selected bipartitions:
+    //for each of the remainder of the selected bipartitions: (this code doesn't execute when strict_resolution rate = majority_resolution_rate
     for (unsigned int i = strict_resolution_rate; i < vec_random.size(); i++){
       unsigned int bipart = vec_random[i];
       unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
@@ -356,13 +379,23 @@ int main(int argc, char** argv)
 	//cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
       }
     }
-
+    if (precise){
+      for (unsigned int i = 0; i < other_biparts.size(); i++){
+	unsigned int bipart = other_biparts[i];
+	unsigned int perc = rand() % 50; //generate a random number between 0 .. 49
+	perc = int(float(perc)/100)* NUM_TO_BUILD;
+	vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TO_BUILD);
+	for (unsigned int j = 0; j < selected_trees.size(); j++){
+	  unsigned int tree_id = selected_trees[j];
+	  tree_matrix[tree_id].push_back(vec_bs[bipart]);
+	}
+      }
+    }
     //add the star bipartition to all the trees
     for (unsigned int i = 0; i < NUM_TO_BUILD; i++)
       tree_matrix[i].push_back(vec_bs[total_BPs]);
 
     //commence building
-
     if (outfilename != "output.tre")
       fout.open(outfilename.c_str());
     else
@@ -390,7 +423,7 @@ int main(int argc, char** argv)
 	vec_bs[i] = NULL;
       }
     }
-    // CPU time comsumed
+    // CPU time consumed
     struct rusage a;
     if (getrusage(RUSAGE_SELF,&a) == -1) {
         cerr << "ERROR: getrusage failed.\n";
