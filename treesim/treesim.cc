@@ -441,7 +441,7 @@ int main(int argc, char** argv)
   string outfilename, startingFile;
   float majRate = 0.0, strictRate = 0.0;
   unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0;
-
+  bool verbose = false, precise = false;
     // TCLAP
     try {
         // Define the command line object.
@@ -453,7 +453,7 @@ int main(int argc, char** argv)
         helpMsg += "   (('Chimp':0.052625,'Human':0.042375):0.007875,'Gorilla':0.060125,\n";
         helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
         helpMsg += "   ('Chimp':0.052625,('Human':0.042375,'Gorilla':0.060125):0.007875,\n";
-        helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
+
 
         helpMsg += "File option: (default = output.tre)\n";
         helpMsg += "   -o <export-file-name>, specify a file name to save the result tree.\n";
@@ -487,6 +487,12 @@ int main(int argc, char** argv)
 	TCLAP::ValueArg<int> uArg("u", "uniquetree", "number of unique trees", false, 0, "number of unique trees in file");
         cmd.add( uArg );
 
+	TCLAP::SwitchArg vArg("v", "verbose", "print out progress", false);
+        cmd.add( vArg );
+
+	TCLAP::SwitchArg pArg("p", "precise", "turn on precise version of algorithm", false);
+        cmd.add( pArg );
+
 
         cmd.parse( argc, argv );
 	NUM_TAXA = numtaxaArg.getValue();
@@ -494,6 +500,8 @@ int main(int argc, char** argv)
         strictRate = sRateArg.getValue();
 	majRate = mRateArg.getValue();
 	unique_trees = uArg.getValue();
+	verbose = vArg.getValue();
+	precise = pArg.getValue();
 
 	if (strictRate > 1 || strictRate < 0){
 	  cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
@@ -657,7 +665,7 @@ int main(int argc, char** argv)
     cout << "building trees!" << endl;
     unsigned int dupCount = 0;
     for (unsigned numOut=0; numOut<NUM_TO_BUILD; ++numOut) {
-      if (numOut % 1000 == 0)
+      if (verbose && numOut % 1000 == 0)
 	cout << numOut << endl;
       string tree = buildtree(tree_matrix[numOut], lm, NUM_TAXA);
       fout << tree << endl;
