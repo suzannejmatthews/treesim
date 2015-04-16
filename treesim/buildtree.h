@@ -62,7 +62,8 @@ void resolve_tree(SCNode * node, SCTree *sctree, vector<SCNode *> & trashcan);
 string compute_tree( 
     LabelMap lm,
     vector< bool* > my_bs,
-    unsigned int NUM_TAXA);
+    unsigned int NUM_TAXA,
+    bool weighted);
 
 
 

@@ -121,13 +121,21 @@ void print_error(int err){
 
 vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
   vector<unsigned int> vec_rand;
-  for ( unsigned i = 0; i < howmany; ++i ) {
-    unsigned int ir = rand()%max;
-    if (find(vec_rand.begin(), vec_rand.end(), ir) != vec_rand.end()) {
-      --i;
-      continue;
+  if (howmany < max){
+    for ( unsigned i = 0; i < howmany; ++i ) {
+      unsigned int ir = rand()%max;
+      if (find(vec_rand.begin(), vec_rand.end(), ir) != vec_rand.end()) {
+	--i;
+	continue;
+      }
+      vec_rand.push_back(ir);
     }
-    vec_rand.push_back(ir);
+  }
+  else{
+    for (unsigned i = 0; i < howmany; i++){
+      unsigned int ir= rand()% max;
+      vec_rand.push_back(ir);
+    }
   }
   return vec_rand;
 }
@@ -136,8 +144,8 @@ int main(int argc, char** argv)
 {
   string outfilename, startingFile;
   float majRate = 0.0, strictRate = 0.0;
-  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0;
-  bool verbose = false, precise = false;
+  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0, DUPLICATES=0;
+  bool verbose = false, precise = false, weighted=false;
     // TCLAP
     try {
         // Define the command line object.
@@ -186,6 +194,9 @@ int main(int argc, char** argv)
 	TCLAP::SwitchArg vArg("v", "verbose", "print out progress", false);
         cmd.add( vArg );
 
+	TCLAP::SwitchArg wArg("w", "weighted", "create weighted trees", false);
+	cmd.add( wArg );
+
 	TCLAP::SwitchArg pArg("p", "precise", "turn on precise version of algorithm", false);
         cmd.add( pArg );
 
@@ -198,6 +209,7 @@ int main(int argc, char** argv)
 	unique_trees = uArg.getValue();
 	verbose = vArg.getValue();
 	precise = pArg.getValue();
+	weighted = wArg.getValue();
 
 	if (strictRate > 1 || strictRate < 0){
 	  cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
@@ -238,7 +250,7 @@ int main(int argc, char** argv)
 	lm.push(taxa);
       }
       random_tree_bs.push_back(star);
-      string random_tree = compute_tree(lm, random_tree_bs, NUM_TAXA); 
+      string random_tree = compute_tree(lm, random_tree_bs, NUM_TAXA, weighted); 
       fout.open("starting.tre");
       fout << random_tree << endl;
       fout.close();
@@ -351,7 +363,8 @@ int main(int argc, char** argv)
       assert(unique_trees < NUM_TREES);
       assert(unique_trees > 0);
       NUM_TO_BUILD = unique_trees;
-      duplicates = genRandomNums(NUM_TREES-unique_trees, NUM_TREES);
+      DUPLICATES = NUM_TREES - unique_trees;
+      duplicates = genRandomNums(DUPLICATES, NUM_TO_BUILD);
       sort(duplicates.begin(), duplicates.end()); //sort the duplicates vector
     }
 
@@ -403,19 +416,22 @@ int main(int argc, char** argv)
     
     cout << "building trees!" << endl;
     unsigned int dupCount = 0;
-    for (unsigned numOut=0; numOut<NUM_TO_BUILD; ++numOut) {
+    assert(NUM_TO_BUILD+DUPLICATES == NUM_TREES);
+    for (unsigned numOut=0; numOut<NUM_TO_BUILD; numOut++) {
       if (verbose && numOut % 1000 == 0)
 	cout << numOut << endl;
-      string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA);
+      string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA, weighted);
       fout << tree << endl;
-      if (unique_trees != 0 && numOut == duplicates[dupCount]){
-	fout << tree << endl;
-	dupCount++;
+      if (unique_trees != 0 && dupCount < DUPLICATES){
+	while (numOut == duplicates[dupCount]){
+	  fout << tree << endl;
+	  dupCount++;
+	}
       }
       //tree_matrix[numOut].clear(); //remove the bipartitions from this
     }
     fout.close();
-
+    assert(dupCount == DUPLICATES);
     //clean up
     for (unsigned int i = 0; i < vec_bs.size(); i++){
       if (vec_bs[i]!=NULL){

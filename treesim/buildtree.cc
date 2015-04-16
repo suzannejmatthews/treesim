@@ -217,7 +217,8 @@ void resolve_tree(SCNode* node, SCTree* sctree, vector<SCNode*> & trashcan) {
 string compute_tree(
     LabelMap lm,
     vector< bool * > my_bs,
-    unsigned int NUM_TAXA){
+    unsigned int NUM_TAXA,
+    bool weighted){
 
   vector<vector<SCNode*> > vvec_distinctClusters2;
   vector<SCNode *> vec_garbageCan;
@@ -324,7 +325,7 @@ string compute_tree(
   //cout << "tree before resolving:" << scTree->GetTreeString(true) << endl;  
   resolve_tree(scTree->root, scTree, vec_garbageCan);
   string mytree;
-  mytree = scTree->GetTreeString(true);
+  mytree = scTree->GetTreeString(weighted);
 
  
  //clean up 

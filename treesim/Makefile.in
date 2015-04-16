@@ -50,8 +50,9 @@ CONFIG_CLEAN_FILES =
 CONFIG_CLEAN_VPATH_FILES =
 am__installdirs = "$(DESTDIR)$(bindir)"
 PROGRAMS = $(bin_PROGRAMS)
-am_treesim_OBJECTS = label-map.$(OBJEXT) SCNode.$(OBJEXT) \
-	SCTree.$(OBJEXT) newick.$(OBJEXT) treesim.$(OBJEXT)
+am_treesim_OBJECTS = label-map.$(OBJEXT) newick.$(OBJEXT) \
+	SCNode.$(OBJEXT) SCTree.$(OBJEXT) buildtree.$(OBJEXT) \
+	treesim.$(OBJEXT)
 treesim_OBJECTS = $(am_treesim_OBJECTS)
 treesim_LDADD = $(LDADD)
 DEFAULT_INCLUDES = -I.@am__isrc@
@@ -176,17 +177,17 @@ target_alias = @target_alias@
 top_build_prefix = @top_build_prefix@
 top_builddir = @top_builddir@
 top_srcdir = @top_srcdir@
-
-#AM_CXXFLAGS = -static
-AM_CXXFLAGS = -Wall -g
+#CXXFLAGS += -O3 -pg
+AM_CXXFLAGS = -static -Wall -O3 -fexpensive-optimizations
 
 # From Split-Dist
 
 # For Consensus tree
 
 # Main
-treesim_SOURCES = label-map.hh label-map.cc SCNode.cc SCTree.cc \
-	newick.h newick.c treesim.cc
+treesim_SOURCES = label-map.hh label-map.cc newick.h newick.c SNode.h \
+	SCNode.cc SCTree.h SCTree.cc buildtree.h buildtree.cc \
+	treesim.cc
 all: config.hh
 	$(MAKE) $(AM_MAKEFLAGS) all-am
 
@@ -290,6 +291,7 @@ distclean-compile:
 
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SCNode.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/SCTree.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/buildtree.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/label-map.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/newick.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/treesim.Po@am__quote@

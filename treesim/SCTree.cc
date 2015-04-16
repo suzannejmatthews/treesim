@@ -157,8 +157,8 @@ SCTree::GetTreeRecurse(
 		sprintf(buf, "%d", node->support);
 		ret = ret + buf;
 	}
-
-	ret = ret + ":" + distance;	
+	if (distances)
+	  ret = ret + ":" + distance;	
 	//ret = ret;	
 }
 
