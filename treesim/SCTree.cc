@@ -143,22 +143,18 @@ SCTree::GetTreeRecurse(
 		return;
 	}
 
-	if (numChildren!= 1)
+	if (numChildren!= 1){
 	  ret = ret + ")";
-
+	  if (distances)
+	    ret += ":" + distance;	
+	}
 	// Output node support as
 	// internal node label
 	// Do it reguardless of distances, because some consense
 	// trees might have same tree strings
 	// as other trees, we want to distinguish
 	// between them in covSEARCH
-	if (node->support) {
-		char buf[16];
-		sprintf(buf, "%d", node->support);
-		ret = ret + buf;
-	}
-	if (distances)
-	  ret = ret + ":" + distance;	
+
 	//ret = ret;	
 }
 
@@ -167,33 +163,33 @@ SCNode*
 SCTree::GetLeastSubtree(SCNode *node)
 {
 	if (node->IsLeaf())
-		return node;
-
+	  return node;
+	
 	SCNode* temp = node->children[0];
 	bool allInts = true;
 	unsigned int numChildren = node->NumChildren();
 
 	for (unsigned int i = 0; i < numChildren; i++) {
-		if (node->children[i]->IsLeaf()) {
-			allInts = false;
-			if (!temp->IsLeaf() || (temp->IsLeaf() && node->children[i]->name < temp->name))
-				temp = node->children[i];
-		}
+	  if (node->children[i]->IsLeaf()) {
+	    allInts = false;
+	    if (!temp->IsLeaf() || (temp->IsLeaf() && node->children[i]->name < temp->name))
+	      temp = node->children[i];
+	  }
 	}
-
+	
 	if (allInts) {
-		vector<SCNode*> kids;
-		kids.resize(numChildren);
-
-		for (unsigned int i = 0; i < numChildren; i++)
-			kids[i] = GetLeastSubtree(node->children[i]);
-
-		temp = kids[0];
-		for (unsigned int i = 0 ;  i < numChildren; i++)
-			if (kids[i]->name < temp->name)
-				temp = kids[i];
+	  vector<SCNode*> kids;
+	  kids.resize(numChildren);
+	  
+	  for (unsigned int i = 0; i < numChildren; i++)
+	    kids[i] = GetLeastSubtree(node->children[i]);
+	  
+	  temp = kids[0];
+	  for (unsigned int i = 0 ;  i < numChildren; i++)
+	    if (kids[i]->name < temp->name)
+	      temp = kids[i];
 	}
-
+	
 	return temp;
 }
 
@@ -201,10 +197,10 @@ void
 SCTree::DeleteAllNodes()
 {
 	for (unsigned int i=0; i<nodelist.size(); ++i) {
-		if (nodelist[i] != NULL) {
-			delete nodelist[i];
-			nodelist[i] = NULL;
-		}
+	  if (nodelist[i] != NULL) {
+	    delete nodelist[i];
+	    nodelist[i] = NULL;
+	  }
 	}
 }
 

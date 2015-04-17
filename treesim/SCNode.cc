@@ -71,9 +71,9 @@ SCNode::SetDistance(double distance)
 {
 	// One of manu's datasets gives us intermediate negative bl
 	if (distance < 0)
-		bl = 0.0;
+	  bl = 0.0;
 	else
-		bl = distance;
+	  bl = distance;
 }
 
 double 
