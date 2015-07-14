@@ -140,313 +140,317 @@ vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
   return vec_rand;
 }
 
-int main(int argc, char** argv)
-{
-  string outfilename, startingFile;
-  float majRate = 0.0, strictRate = 0.0;
-  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0, DUPLICATES=0;
-  bool verbose = false, precise = false, weighted=false;
-    // TCLAP
-    try {
-        // Define the command line object.
-        string    helpMsg  = "treesim\n";
-
-        helpMsg += "Input file: \n";
-        helpMsg += "   The current version of treesim only supports the Newick format.\n";
-        helpMsg += "Sample Newick file: \n";
-        helpMsg += "   (('Chimp':0.052625,'Human':0.042375):0.007875,'Gorilla':0.060125,\n";
-        helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
-        helpMsg += "   ('Chimp':0.052625,('Human':0.042375,'Gorilla':0.060125):0.007875,\n";
-
-
-        helpMsg += "File option: (default = output.tre)\n";
-        helpMsg += "   -o <export-file-name>, specify a file name to save the result tree.\n";
-
-        helpMsg += "Example: \n";
-        helpMsg += "  treesim 500 1000 0.5 .75 -o out.tre\n";
-	helpMsg += "  generates a random 500-taxa, 1000 tree dataset with a strict\n";
-	helpMsg += "  consensus rate of at least 50% and a majority consensus rate\n";
-	helpMsg += "  of 75%. The result is stored in out.tre\n";
-
-        TCLAP::CmdLine cmd(helpMsg, ' ', "0.1");
-
-        TCLAP::UnlabeledValueArg<int>  numtaxaArg( "numtaxa", "number of taxa", true, 5, "Number of taxa"  );
-        cmd.add( numtaxaArg );
-
-        TCLAP::UnlabeledValueArg<unsigned>  numtreeArg( "numtree", "number of output trees", true, 1, "Number of output trees"  );
-        cmd.add( numtreeArg );
-
-        TCLAP::UnlabeledValueArg<float>  sRateArg( "sRate", "strict consensus rate", true, 0.0, "strict rate"  );
-        cmd.add( sRateArg );
-
-        TCLAP::UnlabeledValueArg<float>  mRateArg( "mRate", "majority consensus rate", true, 0.0, "majority rate"  );
-        cmd.add( mRateArg );
-
-        TCLAP::ValueArg<string> outfileArg("o", "outfile", "Output file name", false, "output.tre", "Output file name");
-        cmd.add( outfileArg );
-
-	TCLAP::ValueArg<string> sfileArg("t", "startingtree", "starting tree file name", false, "starting.tre", "input starting tree file name");
-        cmd.add( sfileArg );
-
-	TCLAP::ValueArg<int> uArg("u", "uniquetree", "number of unique trees", false, 0, "number of unique trees in file");
-        cmd.add( uArg );
-
-	TCLAP::SwitchArg vArg("v", "verbose", "print out progress", false);
-        cmd.add( vArg );
-
-	TCLAP::SwitchArg wArg("w", "weighted", "create weighted trees", false);
-	cmd.add( wArg );
-
-	TCLAP::SwitchArg pArg("p", "precise", "turn on precise version of algorithm", false);
-        cmd.add( pArg );
-
-
-        cmd.parse( argc, argv );
-	NUM_TAXA = numtaxaArg.getValue();
-        NUM_TREES = numtreeArg.getValue();
-        strictRate = sRateArg.getValue();
-	majRate = mRateArg.getValue();
-	unique_trees = uArg.getValue();
-	verbose = vArg.getValue();
-	precise = pArg.getValue();
-	weighted = wArg.getValue();
-
-	if (strictRate > 1 || strictRate < 0){
-	  cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
-	  return 1;
-	}
-	if (majRate > 1 || majRate < 0){
-	  cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
-	  return 1;
-	}
-	if (strictRate > majRate){
-	  cerr << "ERROR: strict consensus rate must be lesser than or equal to majority consensus rate!" << endl;
-	  return 1;
-	}
-        outfilename = outfileArg.getValue();
-	startingFile = sfileArg.getValue();
-    } catch (TCLAP::ArgException &e) { // catch any exceptions
-        cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
+void simulate_from_random(string startingFile, int NUM_TAXA, int NUM_TREES, LabelMap lm, float strictRate, float majRate, bool precise, int unique_trees, int DUPLICATES, bool weighted, string outfilename, bool verbose){
+  //this code contains the original treesim code, where we were simulating trees 
+  //from purely the strict and majority consensus rate. The starting tree is always 
+  //random. 
+  NEWICKTREE *newickTree;
+  ofstream fout;
+  int err;
+  FILE *fp;
+  fprintf(stderr, "Building Collection...\n");
+  vector<bool *> vec_bs;
+  fp = fopen(startingFile.c_str(), "r");
+  if(!fp) {
+    cout << "ERROR: file open error:" << startingFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+  unsigned int algType = 0;
+  if (majRate == strictRate && majRate == 0){
+    cout << "Algorithm: Random Collection" << endl;
+    algType = 0;
+  }
+  if (majRate == strictRate && majRate > 0){
+    cout << "Algorithm: Strict Consensus Collection" << endl;
+    algType = 1;
+  }
+  if (majRate > 0 && strictRate == 0){
+    cout << "Algorithm: Majority Consensus Collection" << endl;
+    if (precise)
+      cout << "Precise option: ON" << endl;
+    algType = 2;
+  }
+  if (majRate > 0 && strictRate > 0 && majRate != strictRate){
+    cout << "Algorithm: Combined Consensus Collection" << endl;
+    if (precise)
+      cout << "Precise option: ON" << endl;
+    algType = 3;
+  }
+  
+  unsigned int total_BPs = vec_bs.size()-1;
+  unsigned int majority_resolution_rate = int(total_BPs*majRate);
+  unsigned int strict_resolution_rate = int(total_BPs*strictRate);
+  unsigned int difference = majority_resolution_rate - strict_resolution_rate;
+  vector<unsigned int> duplicates, vec_random, other_biparts;
+  unsigned int NUM_TO_BUILD = 0;
+  vector< vector<bool*> > tree_matrix;
+  cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
+  cout << "    Number of Output trees = " << NUM_TREES << endl;
+  cout << "    Number of bipartitions that will be in all the trees = " << strict_resolution_rate << endl;
+  cout << "    Number of bipartitions that will be additionally in 50% or more of trees  = " << difference << endl;
+  
+  srand(time(NULL)); //seed random number generator
+  
+  //select r% of the bipartitions at random
+  vec_random = genRandomNums(majority_resolution_rate, total_BPs);
+  bool * select;
+  unsigned int place;
+  if (precise){
+    select = (bool*)calloc(total_BPs,sizeof(bool));
+    for (unsigned int i = 0; i < vec_random.size(); i++){
+      place = vec_random[i];
+      select[place]=1;
     }
-
-
-    //generate a random tree with the specified number of taxa
-   LabelMap lm;
-   ofstream fout;
-   NEWICKTREE *newickTree;
-   int err;
-   FILE *fp;
-    if (startingFile == "starting.tre"){
-      cout << "We get here!" << endl;
-      fprintf(stderr, "Generating a random tree with %u taxa...\n", NUM_TAXA);
-      vector<bool *> random_tree_bs;
-      bool * star = new bool[NUM_TAXA];
-      for (unsigned int i = 0; i < NUM_TAXA; i++){
-	star[i] = 1;
-	string taxa;
-	stringstream ss;
-	ss << i+1;
-	ss >> taxa;
-	lm.push(taxa);
-      }
-      random_tree_bs.push_back(star);
-      string random_tree = compute_tree(lm, random_tree_bs, NUM_TAXA, weighted); 
-      fout.open("starting.tre");
-      fout << random_tree << endl;
-      fout.close();
-      fprintf(stderr, "Done. starting tree outputted to starting.tre.\n");
-      random_tree_bs.clear();
-      delete [] star;
+    for (unsigned int i = 0; i < total_BPs; i++){
+      if (select[i] == 0)
+	other_biparts.push_back(i);
     }
-    else{
-      //collect label map from file
-      cout << "getting labels from file: " << startingFile << endl;
-      fp = fopen(startingFile.c_str(), "r");
-      if (!fp){
-        cout << "ERROR: file open error:" << argv[1] << endl;
-        exit(0);
-      }
-      newickTree = loadnewicktree2(fp, &err);
-      if(!newickTree) {
-	print_error(err);
-      }
-      else{
-	GetTaxaLabels2(newickTree->root, lm);
-	killnewicktree(newickTree);
-	fclose(fp);
-      }
-      assert(NUM_TAXA == lm.size());
+    free(select);
+  }
+  cout << "Requested Majority Rate=" << majRate << endl;
+  cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
+  cout << "Requested Strict Rate=" << strictRate << endl;
+  cout << "Attempted Strict Rate=" << float(strict_resolution_rate)/total_BPs << endl;  
+  
+  //generate duplicates, if needed
+  
+  if (unique_trees == 0){ //if this parameter is not specfied
+    NUM_TO_BUILD = NUM_TREES;
+  }
+  else{
+    assert(unique_trees < NUM_TREES);
+    assert(unique_trees > 0);
+    NUM_TO_BUILD = unique_trees;
+    DUPLICATES = NUM_TREES - unique_trees;
+    duplicates = genRandomNums(DUPLICATES, NUM_TO_BUILD);
+    sort(duplicates.begin(), duplicates.end()); //sort the duplicates vector
+  }
+  
+  //generate t vectors of vectors (n x t)
+  tree_matrix.resize(NUM_TO_BUILD);
+  for (unsigned int i = 0; i < strict_resolution_rate; i++){
+    //cout << "adding bipartition " << vec_random[i] << "to all the trees" << endl;
+    unsigned int bipart = vec_random[i];
+    for (unsigned int j = 0; j < NUM_TO_BUILD; j++){
+      tree_matrix[j].push_back(vec_bs[bipart]);
     }
-    fprintf(stderr, "Building Collection...\n");
- 
-
-    vector<bool *> vec_bs;
-    fp = fopen(startingFile.c_str(), "r");
-    if(!fp) {
-        cout << "ERROR: file open error:" << argv[1] << endl;
-        exit(0);
+  }
+  
+  //for each of the remainder of the selected bipartitions: (this code doesn't execute when strict_resolution rate = majority_resolution_rate
+  for (unsigned int i = strict_resolution_rate; i < vec_random.size(); i++){
+    unsigned int bipart = vec_random[i];
+    unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
+    //cout << "Adding bipartition: " << vec_random[i] << " to " << perc << "% of the trees" << endl;
+    perc = int((float(perc)/100) * NUM_TO_BUILD);
+    //cout << "perc will actually be: " << perc << endl;
+    vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TO_BUILD);
+    for (unsigned int j = 0; j < selected_trees.size(); j++){
+      unsigned int tree_id = selected_trees[j];
+      tree_matrix[tree_id].push_back(vec_bs[bipart]);
+      //cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
     }
-
-    newickTree = loadnewicktree2(fp, &err);
-    if(!newickTree) {
-      print_error(err);
-    }
-    else{
-      collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
-      killnewicktree(newickTree);
-    }
-
-    fclose(fp);
-    unsigned int algType = 0;
-    if (majRate == strictRate && majRate == 0){
-      cout << "Algorithm: Random Collection" << endl;
-      algType = 0;
-    }
-    if (majRate == strictRate && majRate > 0){
-      cout << "Algorithm: Strict Consensus Collection" << endl;
-      algType = 1;
-    }
-    if (majRate > 0 && strictRate == 0){
-      cout << "Algorithm: Majority Consensus Collection" << endl;
-      if (precise)
-	cout << "Precise option: ON" << endl;
-      algType = 2;
-    }
-    if (majRate > 0 && strictRate > 0 && majRate != strictRate){
-      cout << "Algorithm: Combined Consensus Collection" << endl;
-      if (precise)
-	cout << "Precise option: ON" << endl;
-      algType = 3;
-    }
-
-    unsigned int total_BPs = vec_bs.size()-1;
-    unsigned int majority_resolution_rate = int(total_BPs*majRate);
-    unsigned int strict_resolution_rate = int(total_BPs*strictRate);
-    unsigned int difference = majority_resolution_rate - strict_resolution_rate;
-    vector<unsigned int> duplicates, vec_random, other_biparts;
-    unsigned int NUM_TO_BUILD = 0;
-    vector< vector<bool*> > tree_matrix;
-    cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
-    cout << "    Number of Output trees = " << NUM_TREES << endl;
-    cout << "    Number of bipartitions that will be in all the trees = " << strict_resolution_rate << endl;
-    cout << "    Number of bipartitions that will be additionally in 50% or more of trees  = " << difference << endl;
-    
-    srand(time(NULL)); //seed random number generator
-
-    //select r% of the bipartitions at random
-    vec_random = genRandomNums(majority_resolution_rate, total_BPs);
-    bool * select;
-    unsigned int place;
-    if (precise){
-      select = (bool*)calloc(total_BPs,sizeof(bool));
-      for (unsigned int i = 0; i < vec_random.size(); i++){
-	place = vec_random[i];
-	select[place]=1;
-      }
-      for (unsigned int i = 0; i < total_BPs; i++){
-	if (select[i] == 0)
-	  other_biparts.push_back(i);
-      }
-      free(select);
-    }
-    cout << "Requested Majority Rate=" << majRate << endl;
-    cout << "Attempted Majority Rate=" << float(vec_random.size())/total_BPs << endl;    
-    cout << "Requested Strict Rate=" << strictRate << endl;
-    cout << "Attempted Strict Rate=" << float(strict_resolution_rate)/total_BPs << endl;  
-    
-    //generate duplicates, if needed
-    
-    if (unique_trees == 0){ //if this parameter is not specfied
-      NUM_TO_BUILD = NUM_TREES;
-    }
-    else{
-      assert(unique_trees < NUM_TREES);
-      assert(unique_trees > 0);
-      NUM_TO_BUILD = unique_trees;
-      DUPLICATES = NUM_TREES - unique_trees;
-      duplicates = genRandomNums(DUPLICATES, NUM_TO_BUILD);
-      sort(duplicates.begin(), duplicates.end()); //sort the duplicates vector
-    }
-
-    //generate t vectors of vectors (n x t)
-    tree_matrix.resize(NUM_TO_BUILD);
-    for (unsigned int i = 0; i < strict_resolution_rate; i++){
-      //cout << "adding bipartition " << vec_random[i] << "to all the trees" << endl;
-      unsigned int bipart = vec_random[i];
-      for (unsigned int j = 0; j < NUM_TO_BUILD; j++){
-	tree_matrix[j].push_back(vec_bs[bipart]);
-      }
-    }
-
-    //for each of the remainder of the selected bipartitions: (this code doesn't execute when strict_resolution rate = majority_resolution_rate
-    for (unsigned int i = strict_resolution_rate; i < vec_random.size(); i++){
-      unsigned int bipart = vec_random[i];
-      unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
-      //cout << "Adding bipartition: " << vec_random[i] << " to " << perc << "% of the trees" << endl;
-      perc = int((float(perc)/100) * NUM_TO_BUILD);
-      //cout << "perc will actually be: " << perc << endl;
+  }
+  if (precise){
+    for (unsigned int i = 0; i < other_biparts.size(); i++){
+      unsigned int bipart = other_biparts[i];
+      unsigned int perc = rand() % 50; //generate a random number between 0 .. 49
+      perc = int(float(perc)/100)* NUM_TO_BUILD;
       vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TO_BUILD);
       for (unsigned int j = 0; j < selected_trees.size(); j++){
 	unsigned int tree_id = selected_trees[j];
 	tree_matrix[tree_id].push_back(vec_bs[bipart]);
-	//cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
       }
     }
-    if (precise){
-      for (unsigned int i = 0; i < other_biparts.size(); i++){
-	unsigned int bipart = other_biparts[i];
-	unsigned int perc = rand() % 50; //generate a random number between 0 .. 49
-	perc = int(float(perc)/100)* NUM_TO_BUILD;
-	vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TO_BUILD);
-	for (unsigned int j = 0; j < selected_trees.size(); j++){
-	  unsigned int tree_id = selected_trees[j];
-	  tree_matrix[tree_id].push_back(vec_bs[bipart]);
-	}
+  }
+  
+  //add the star bipartition to all the trees
+  for (unsigned int i = 0; i < NUM_TO_BUILD; i++)
+    tree_matrix[i].push_back(vec_bs[total_BPs]);
+  
+  //commence building
+  if (outfilename != "output.tre")
+    fout.open(outfilename.c_str());
+  else
+    fout.open("output.tre");
+  
+  cout << "building trees!" << endl;
+  unsigned int dupCount = 0;
+  assert(NUM_TO_BUILD+DUPLICATES == NUM_TREES);
+  for (unsigned numOut=0; numOut<NUM_TO_BUILD; numOut++) {
+    if (verbose && numOut % 1000 == 0)
+      cout << numOut << endl;
+    string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA, weighted);
+    fout << tree << endl;
+    if (unique_trees != 0 && dupCount < DUPLICATES){
+      while (numOut == duplicates[dupCount]){
+	fout << tree << endl;
+	dupCount++;
       }
     }
-    //add the star bipartition to all the trees
-    for (unsigned int i = 0; i < NUM_TO_BUILD; i++)
-      tree_matrix[i].push_back(vec_bs[total_BPs]);
+    //tree_matrix[numOut].clear(); //remove the bipartitions from this
+  }
+  fout.close();
+  assert(dupCount == DUPLICATES);
+  //clean up
+  for (unsigned int i = 0; i < vec_bs.size(); i++){
+    if (vec_bs[i]!=NULL){
+      delete [] vec_bs[i];
+      vec_bs[i] = NULL;
+    }
+  }
+  
+}
 
-    //commence building
-    if (outfilename != "output.tre")
-      fout.open(outfilename.c_str());
-    else
-      fout.open("output.tre");
+int main(int argc, char** argv)
+{
+  string outfilename, strictFile, majFile;
+  float majRate = 0.0, strictRate = 0.0;
+  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0, DUPLICATES=0;
+  bool verbose = false, precise = false, weighted=false;
+  // TCLAP
+  try {
+    // Define the command line object.
+    string    helpMsg  = "treesim\n";
     
-    cout << "building trees!" << endl;
-    unsigned int dupCount = 0;
-    assert(NUM_TO_BUILD+DUPLICATES == NUM_TREES);
-    for (unsigned numOut=0; numOut<NUM_TO_BUILD; numOut++) {
-      if (verbose && numOut % 1000 == 0)
-	cout << numOut << endl;
-      string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA, weighted);
-      fout << tree << endl;
-      if (unique_trees != 0 && dupCount < DUPLICATES){
-	while (numOut == duplicates[dupCount]){
-	  fout << tree << endl;
-	  dupCount++;
-	}
-      }
-      //tree_matrix[numOut].clear(); //remove the bipartitions from this
+    helpMsg += "Input file: \n";
+    helpMsg += "   The current version of treesim only supports the Newick format.\n";
+    helpMsg += "Sample Newick file: \n";
+    helpMsg += "   (('Chimp':0.052625,'Human':0.042375):0.007875,'Gorilla':0.060125,\n";
+    helpMsg += "   ('Gibbon':0.124833,'Orangutan':0.0971667):0.038875);\n";
+    helpMsg += "   ('Chimp':0.052625,('Human':0.042375,'Gorilla':0.060125):0.007875,\n";
+    
+    
+    helpMsg += "File option: (default = output.tre)\n";
+    helpMsg += "   -o <export-file-name>, specify a file name to save the result tree.\n";
+    
+    helpMsg += "Example: \n";
+    helpMsg += "  treesim 500 1000 0.5 .75 -o out.tre\n";
+    helpMsg += "  generates a random 500-taxa, 1000 tree dataset with a strict\n";
+    helpMsg += "  consensus rate of at least 50% and a majority consensus rate\n";
+    helpMsg += "  of 75%. The result is stored in out.tre\n";
+    
+    TCLAP::CmdLine cmd(helpMsg, ' ', "0.1");
+    
+    TCLAP::UnlabeledValueArg<int>  numtaxaArg( "numtaxa", "number of taxa", true, 5, "Number of taxa"  );
+    cmd.add( numtaxaArg );        
+
+    TCLAP::UnlabeledValueArg<unsigned>  numtreeArg( "numtree", "number of output trees", true, 1, "Number of output trees"  );
+    cmd.add( numtreeArg );
+
+    TCLAP::UnlabeledValueArg<float>  sRateArg( "sRate", "strict consensus rate", true, 0.0, "strict rate");
+    cmd.add( sRateArg );
+    
+    TCLAP::UnlabeledValueArg<float>  mRateArg( "mRate", "majority consensus rate", true, 0.0, "majority rate");
+    cmd.add( mRateArg );
+    
+    TCLAP::ValueArg<string> outfileArg("o", "outfile", "Output file name", false, "output.tre", "Output file name");
+    cmd.add( outfileArg );
+    
+    TCLAP::ValueArg<string> mfileArg("m", "majFile", "majority consensus tree", false, "maj.tre", "majority consensus tree file");
+    cmd.add( mfileArg );
+    
+    TCLAP::ValueArg<string> sfileArg("s", "strictFile", "strict consensus tree", false, "strict.tre", "strict consensus tree file");
+    cmd.add( sfileArg );
+    
+    TCLAP::ValueArg<int> uArg("u", "uniquetree", "number of unique trees", false, 0, "number of unique trees in file");
+    cmd.add( uArg );
+    
+    TCLAP::SwitchArg vArg("v", "verbose", "print out progress", false);
+    cmd.add( vArg );
+    
+    TCLAP::SwitchArg wArg("w", "weighted", "create weighted trees", false);
+    cmd.add( wArg );
+    
+    TCLAP::SwitchArg pArg("p", "precise", "turn on precise version of algorithm", false);
+    cmd.add( pArg );
+      
+    cmd.parse( argc, argv );
+    NUM_TAXA = numtaxaArg.getValue();
+    NUM_TREES = numtreeArg.getValue();
+    strictRate = sRateArg.getValue();
+    majRate = mRateArg.getValue();
+    unique_trees = uArg.getValue();
+    verbose = vArg.getValue();
+    precise = pArg.getValue();
+    weighted = wArg.getValue(); 
+    outfilename = outfileArg.getValue();
+    strictFile = sfileArg.getValue();
+    majFile = mfileArg.getValue();   
+    if (strictRate > 1 || strictRate < 0){
+      cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
+      return 1;
     }
+    if (majRate > 1 || majRate < 0){
+      cerr << "ERROR: strict consensus rate must be between 0 and 1!" << endl;
+      return 1;
+    }
+    if (strictRate > majRate){
+      cerr << "ERROR: strict consensus rate must be lesser than or equal to majority consensus rate!" << endl;
+      return 1;
+    }
+
+  } catch (TCLAP::ArgException &e) { // catch any exceptions
+    cerr << "error: " << e.error() << " for arg " << e.argId() << endl;
+  }
+
+  
+  //generate a random tree with the specified number of taxa
+  LabelMap lm;
+  ofstream fout;
+  //NEWICKTREE *newickTree;
+  //int err;
+  //FILE *fp;
+  if (strictFile == "strict.tre" && majFile == "maj.tre"){
+    fprintf(stderr, "Generating a random tree with %u taxa...\n", NUM_TAXA);
+    vector<bool *> random_tree_bs;
+    bool * star = new bool[NUM_TAXA];
+    for (unsigned int i = 0; i < NUM_TAXA; i++){
+      star[i] = 1;
+      string taxa;
+      stringstream ss;
+      ss << i+1;
+      ss >> taxa;
+      lm.push(taxa);
+    }
+    random_tree_bs.push_back(star);
+    string random_tree = compute_tree(lm, random_tree_bs, NUM_TAXA, weighted); 
+    fout.open("starting.tre");
+    fout << random_tree << endl;
     fout.close();
-    assert(dupCount == DUPLICATES);
-    //clean up
-    for (unsigned int i = 0; i < vec_bs.size(); i++){
-      if (vec_bs[i]!=NULL){
-	delete [] vec_bs[i];
-	vec_bs[i] = NULL;
-      }
+    fprintf(stderr, "Done. starting tree outputted to starting.tre.\n");
+    random_tree_bs.clear();
+    delete [] star;
+    simulate_from_random("starting.tre", NUM_TAXA, NUM_TREES, lm, strictRate, majRate, precise, unique_trees, DUPLICATES, weighted, outfilename, verbose);
+  }
+  else{
+    if (strictFile != "strict.tre" && majFile == "maj.tre"){
+      cout << "We will get strict consensus bipartitions from the strict tree located in " << strictFile << "!" << endl;
     }
-    // CPU time consumed
-    struct rusage a;
-    if (getrusage(RUSAGE_SELF,&a) == -1) {
-        cerr << "ERROR: getrusage failed.\n";
-        exit(2);
+    else if (strictFile == "strict.tre" && majFile != "maj.tre"){
+      cout << "We will get majority consensus bipartitions from the majority tree located in " << majFile << "!" << endl;
     }
-    cout << "\n    Total CPU time: " << a.ru_utime.tv_sec+a.ru_stime.tv_sec << " sec and ";
-    cout << a.ru_utime.tv_usec+a.ru_stime.tv_usec << " usec.\n";
- 
-    return 0;
+    else{
+      cout << "we will construct the combined consensus resolution tree using the trees located in " << strictFile << " and " << majFile << "!" << endl;
+    }
+  }
+  
+  // CPU time consumed
+  struct rusage a;
+  if (getrusage(RUSAGE_SELF,&a) == -1) {
+    cerr << "ERROR: getrusage failed.\n";
+    exit(2);
+  }
+  cout << "\n    Total CPU time: " << a.ru_utime.tv_sec+a.ru_stime.tv_sec << " sec and ";
+  cout << a.ru_utime.tv_usec+a.ru_stime.tv_usec << " usec.\n";
+  
+  return 0;
 }
