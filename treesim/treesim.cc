@@ -59,15 +59,15 @@ extern "C" {
 
 using namespace std;
 
-void GetTaxaLabels2(NEWICKNODE *node, LabelMap &lm) {
-  if (node->Nchildren == 0) {
+void PopulateTaxaLabels( NEWICKNODE *node, LabelMap &lm) {
+  if (node->Nchildren == 0) { //if leaf node
     string temp(node->label);
-    lm.push(temp);
-  } else
-    for(int i=0; i<node->Nchildren; ++i)
-      GetTaxaLabels2(node->child[i], lm);
+    lm.add(temp);
+  }
+  else
+    for (int i=0;i<node->Nchildren;++i)
+      PopulateTaxaLabels(node->child[i], lm);
 }
-
 
 bool * collect_biparts(NEWICKNODE* startNode, LabelMap &lm, unsigned treeIdx, vector<bool *> & vec_bs, unsigned int NUM_TAXA)
 {
@@ -140,7 +140,7 @@ vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
   return vec_rand;
 }
 
-void simulate_from_random(string startingFile, int NUM_TAXA, int NUM_TREES, LabelMap lm, float strictRate, float majRate, bool precise, int unique_trees, int DUPLICATES, bool weighted, string outfilename, bool verbose){
+void simulate_from_random(string startingFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, LabelMap lm, float strictRate, float majRate, bool precise, unsigned int unique_trees, unsigned int DUPLICATES, bool weighted, string outfilename, bool verbose){
   //this code contains the original treesim code, where we were simulating trees 
   //from purely the strict and majority consensus rate. The starting tree is always 
   //random. 
@@ -164,26 +164,26 @@ void simulate_from_random(string startingFile, int NUM_TAXA, int NUM_TREES, Labe
     killnewicktree(newickTree);
   }
   fclose(fp);
-  unsigned int algType = 0;
+  //unsigned int algType = 0;
   if (majRate == strictRate && majRate == 0){
     cout << "Algorithm: Random Collection" << endl;
-    algType = 0;
+    //algType = 0;
   }
   if (majRate == strictRate && majRate > 0){
     cout << "Algorithm: Strict Consensus Collection" << endl;
-    algType = 1;
+    //algType = 1;
   }
   if (majRate > 0 && strictRate == 0){
     cout << "Algorithm: Majority Consensus Collection" << endl;
     if (precise)
       cout << "Precise option: ON" << endl;
-    algType = 2;
+    //algType = 2;
   }
   if (majRate > 0 && strictRate > 0 && majRate != strictRate){
     cout << "Algorithm: Combined Consensus Collection" << endl;
     if (precise)
       cout << "Precise option: ON" << endl;
-    algType = 3;
+    //algType = 3;
   }
   
   unsigned int total_BPs = vec_bs.size()-1;
@@ -277,11 +277,8 @@ void simulate_from_random(string startingFile, int NUM_TAXA, int NUM_TREES, Labe
     tree_matrix[i].push_back(vec_bs[total_BPs]);
   
   //commence building
-  if (outfilename != "output.tre")
-    fout.open(outfilename.c_str());
-  else
-    fout.open("output.tre");
-  
+  fout.open(outfilename.c_str());
+
   cout << "building trees!" << endl;
   unsigned int dupCount = 0;
   assert(NUM_TO_BUILD+DUPLICATES == NUM_TREES);
@@ -308,6 +305,132 @@ void simulate_from_random(string startingFile, int NUM_TAXA, int NUM_TREES, Labe
     }
   }
   
+}
+
+void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
+  NEWICKTREE *newickTree;
+  ofstream fout;
+  int err;
+  FILE *fp;
+  vector<bool *> vec_bs;
+  LabelMap lm;
+  //collect labels
+  cout << "Collecting labels from " << strictFile << endl;
+  fp = fopen(strictFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << strictFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    PopulateTaxaLabels(newickTree->root, lm);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+  cout << "Found: " << lm.size() << " taxa" << endl;
+  assert(lm.size() == NUM_TAXA);
+  //adding star bipartition
+  bool * star = new bool[NUM_TAXA];
+  for (unsigned int i = 0; i < NUM_TAXA; i++){
+    star[i] = 1;
+  }
+  vec_bs.push_back(star);
+  //collect strict bipartitions from the strict consensus tree
+  cout << "Collecting strict consensus bipartitions from tree located in " << strictFile << endl;
+  fp = fopen(strictFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << strictFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+  cout << "done." << endl;
+
+  unsigned int total_BPs = vec_bs.size()-1;
+  float strict_rate = (float)total_BPs/(NUM_TAXA-3);
+  cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
+  cout << "    Number of Output trees = " << NUM_TREES << endl;
+  cout << "    Number of bipartitions that will be in all the trees = " << total_BPs << endl;
+  cout << "Detected Strict Rate=" << strict_rate << endl;
+
+  //we currently don't handle duplicates -- right now, we're just trying to implement the simple building 
+  fout.open(outfilename.c_str());
+  for (unsigned numOut=0; numOut<NUM_TREES; numOut++) {
+    if (verbose && numOut % 1000 == 0)
+      cout << numOut << endl;
+    string tree = compute_tree(lm, vec_bs, NUM_TAXA, weighted);
+    fout << tree << endl;
+    //tree_matrix[numOut].clear(); //remove the bipartitions from this
+  }
+  fout.close();
+  //delete [] star;
+  //clean up
+  for (unsigned int i = 0; i < vec_bs.size(); i++){
+    if (vec_bs[i]!=NULL){
+      delete [] vec_bs[i];
+      vec_bs[i] = NULL;
+    }
+  }
+}
+
+void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
+  NEWICKTREE *newickTree;
+  ofstream fout;
+  int err;
+  FILE *fp;
+  vector<bool *> vec_bs;
+  LabelMap lm;
+  //collect labels
+  cout << "Collecting labels from " << majFile << endl;
+  fp = fopen(majFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << majFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    PopulateTaxaLabels(newickTree->root, lm);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+
+  //collect strict bipartitions from the strict consensus tree
+  cout << "Collecting majority consensus bipartitions from tree located in " << majFile << endl;
+  fp = fopen(majFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << majFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+
+  unsigned int total_BPs = vec_bs.size()-1;
+  float maj_rate = (float)total_BPs/(NUM_TAXA-3);
+  cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
+  cout << "    Number of Output trees = " << NUM_TREES << endl;
+  cout << "    Number of bipartitions that will be in a majority of all the trees = " << total_BPs << endl;
+  cout << "Detected Majority Rate=" << maj_rate << endl;
+
 }
 
 int main(int argc, char** argv)
@@ -434,6 +557,8 @@ int main(int argc, char** argv)
   else{
     if (strictFile != "strict.tre" && majFile == "maj.tre"){
       cout << "We will get strict consensus bipartitions from the strict tree located in " << strictFile << "!" << endl;
+      simulate_from_strict(strictFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
+      
     }
     else if (strictFile == "strict.tre" && majFile != "maj.tre"){
       cout << "We will get majority consensus bipartitions from the majority tree located in " << majFile << "!" << endl;
