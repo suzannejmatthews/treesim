@@ -332,14 +332,9 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
   fclose(fp);
   cout << "Found: " << lm.size() << " taxa" << endl;
   assert(lm.size() == NUM_TAXA);
-  //adding star bipartition
-  bool * star = new bool[NUM_TAXA];
-  for (unsigned int i = 0; i < NUM_TAXA; i++){
-    star[i] = 1;
-  }
-  vec_bs.push_back(star);
+
   //collect strict bipartitions from the strict consensus tree
-  cout << "Collecting strict consensus bipartitions from tree located in " << strictFile << endl;
+  cout << "Collecting strict consensus bipartitions from " << strictFile << endl;
   fp = fopen(strictFile.c_str(), "r");
   if(!fp) {
     cerr << "ERROR: file open error:" << strictFile << endl;
@@ -355,6 +350,15 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
   }
   fclose(fp);
   cout << "done." << endl;
+
+  cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
+  unsigned int count = 0;
+  for (unsigned int i = vec_bs.size()-2; i < vec_bs.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      count+=vec_bs[i][j];
+  }
+  if (count == 2*NUM_TAXA)
+    vec_bs.pop_back();
 
   unsigned int total_BPs = vec_bs.size()-1;
   float strict_rate = (float)total_BPs/(NUM_TAXA-3);
@@ -556,12 +560,12 @@ int main(int argc, char** argv)
   }
   else{
     if (strictFile != "strict.tre" && majFile == "maj.tre"){
-      cout << "We will get strict consensus bipartitions from the strict tree located in " << strictFile << "!" << endl;
+      cout << "Algorithm: Strict Consensus Resolution (From Consensus Input)" << strictFile << "!" << endl;
       simulate_from_strict(strictFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
       
     }
     else if (strictFile == "strict.tre" && majFile != "maj.tre"){
-      cout << "We will get majority consensus bipartitions from the majority tree located in " << majFile << "!" << endl;
+      cout << "Algorithm: Majority Consensus Resolution (From Consensus Input)" << majFile << "!" << endl;
     }
     else{
       cout << "we will construct the combined consensus resolution tree using the trees located in " << strictFile << " and " << majFile << "!" << endl;
