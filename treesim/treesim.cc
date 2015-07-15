@@ -170,11 +170,11 @@ void simulate_from_random(string startingFile, unsigned int NUM_TAXA, unsigned i
     //algType = 0;
   }
   if (majRate == strictRate && majRate > 0){
-    cout << "Algorithm: Strict Consensus Collection" << endl;
+    cout << "Algorithm: Strict Consensus Collection (From sandom starting tree)" << endl;
     //algType = 1;
   }
   if (majRate > 0 && strictRate == 0){
-    cout << "Algorithm: Majority Consensus Collection" << endl;
+    cout << "Algorithm: Majority Consensus Collection (From random starting tree)" << endl;
     if (precise)
       cout << "Precise option: ON" << endl;
     //algType = 2;
@@ -353,6 +353,8 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
 
   cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
   unsigned int count = 0;
+  //this is a workaround -- for some reason, on some multifurcating sets two!! star bipartitions get collected at the end.
+  //what is up with that?
   for (unsigned int i = vec_bs.size()-2; i < vec_bs.size(); i++){
     for (unsigned int j = 0; j < NUM_TAXA; j++)
       count+=vec_bs[i][j];
@@ -368,6 +370,7 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
   cout << "Detected Strict Rate=" << strict_rate << endl;
 
   //we currently don't handle duplicates -- right now, we're just trying to implement the simple building 
+  cout << "Building and outputing trees..." << endl;
   fout.open(outfilename.c_str());
   for (unsigned numOut=0; numOut<NUM_TREES; numOut++) {
     if (verbose && numOut % 1000 == 0)
@@ -394,6 +397,7 @@ void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int 
   FILE *fp;
   vector<bool *> vec_bs;
   LabelMap lm;
+  vector< vector<bool*> > tree_matrix;
   //collect labels
   cout << "Collecting labels from " << majFile << endl;
   fp = fopen(majFile.c_str(), "r");
@@ -410,9 +414,11 @@ void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int 
     killnewicktree(newickTree);
   }
   fclose(fp);
+  cout << "Found: " << lm.size() << " taxa" << endl;
+  assert(lm.size() == NUM_TAXA);
 
-  //collect strict bipartitions from the strict consensus tree
-  cout << "Collecting majority consensus bipartitions from tree located in " << majFile << endl;
+  //collect majority consensus bipartitions from the majority consensus tree
+  cout << "Collecting majority consensus bipartitions from " << majFile << endl;
   fp = fopen(majFile.c_str(), "r");
   if(!fp) {
     cerr << "ERROR: file open error:" << majFile << endl;
@@ -434,7 +440,55 @@ void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int 
   cout << "    Number of Output trees = " << NUM_TREES << endl;
   cout << "    Number of bipartitions that will be in a majority of all the trees = " << total_BPs << endl;
   cout << "Detected Majority Rate=" << maj_rate << endl;
+  //again, workaround for reading multifurcating consensus trees (duplicate star bipartitions)
+  unsigned int count = 0;
+  for (unsigned int i = vec_bs.size()-2; i < vec_bs.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      count+=vec_bs[i][j];
+  }
+  if (count == 2*NUM_TAXA)
+    vec_bs.pop_back();
 
+  //for this initial version, no duplicate options are available for this function  
+  tree_matrix.resize(NUM_TREES);
+
+  srand(time(NULL)); //seed random number generator
+
+  for (unsigned int i = 0; i < total_BPs; i++){
+    unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
+    //cout << "Adding bipartition to " << perc << "% of the trees" << endl;
+    perc = int((float(perc)/100) * NUM_TREES);
+    //cout << "perc will actually be: " << perc << endl;
+    vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TREES);
+    for (unsigned int j = 0; j < selected_trees.size(); j++){
+      unsigned int tree_id = selected_trees[j];
+      tree_matrix[tree_id].push_back(vec_bs[i]);
+      //cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
+    }
+  }
+  //now, add the star bipartition to every tree
+  for (unsigned int i = 0; i < NUM_TREES; i++)
+    tree_matrix[i].push_back(vec_bs[total_BPs]);
+
+  //now build
+  cout << "Building and outputing trees..." << endl;
+  fout.open(outfilename.c_str());
+  for (unsigned numOut=0; numOut<NUM_TREES; numOut++) {
+    if (verbose && numOut % 1000 == 0)
+      cout << numOut << endl;
+    string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA, weighted);
+    fout << tree << endl;
+    //tree_matrix[numOut].clear(); //remove the bipartitions from this
+  }
+  fout.close();
+  //delete [] star;
+  //clean up
+  for (unsigned int i = 0; i < vec_bs.size(); i++){
+    if (vec_bs[i]!=NULL){
+      delete [] vec_bs[i];
+      vec_bs[i] = NULL;
+    }
+  }
 }
 
 int main(int argc, char** argv)
@@ -560,12 +614,13 @@ int main(int argc, char** argv)
   }
   else{
     if (strictFile != "strict.tre" && majFile == "maj.tre"){
-      cout << "Algorithm: Strict Consensus Resolution (From Consensus Input)" << strictFile << "!" << endl;
+      cout << "Algorithm: Strict Consensus Resolution (From Consensus Input)" << endl;
       simulate_from_strict(strictFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
       
     }
     else if (strictFile == "strict.tre" && majFile != "maj.tre"){
-      cout << "Algorithm: Majority Consensus Resolution (From Consensus Input)" << majFile << "!" << endl;
+      cout << "Algorithm: Majority Consensus Resolution (From Consensus Input)" << endl;
+      simulate_from_majority(majFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
     }
     else{
       cout << "we will construct the combined consensus resolution tree using the trees located in " << strictFile << " and " << majFile << "!" << endl;
