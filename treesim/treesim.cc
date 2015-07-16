@@ -58,6 +58,7 @@ extern "C" {
 #include <./tclap/CmdLine.h>
 
 using namespace std;
+unsigned int NUM_TAXA; //global variable (unfortunately)
 
 void PopulateTaxaLabels( NEWICKNODE *node, LabelMap &lm) {
   if (node->Nchildren == 0) { //if leaf node
@@ -69,7 +70,7 @@ void PopulateTaxaLabels( NEWICKNODE *node, LabelMap &lm) {
       PopulateTaxaLabels(node->child[i], lm);
 }
 
-bool * collect_biparts(NEWICKNODE* startNode, LabelMap &lm, unsigned treeIdx, vector<bool *> & vec_bs, unsigned int NUM_TAXA)
+bool * collect_biparts(NEWICKNODE* startNode, LabelMap &lm, unsigned treeIdx, vector<bool *> & vec_bs)
 {
   if (startNode->Nchildren == 0) {
     // leaf node
@@ -86,7 +87,7 @@ bool * collect_biparts(NEWICKNODE* startNode, LabelMap &lm, unsigned treeIdx, ve
     for (unsigned int i = 0; i < NUM_TAXA; i++)
       bs[i] = 0;
     for (int i=0; i<startNode->Nchildren; ++i) {
-      bool * ebs = collect_biparts(startNode->child[i], lm, treeIdx, vec_bs, NUM_TAXA);
+      bool * ebs = collect_biparts(startNode->child[i], lm, treeIdx, vec_bs);
       for (unsigned int j = 0; j < NUM_TAXA; j++)
 	bs[j] |= ebs[j];
 
@@ -140,7 +141,7 @@ vector<unsigned int> genRandomNums(unsigned int howmany, unsigned int max){
   return vec_rand;
 }
 
-void simulate_from_random(string startingFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, LabelMap lm, float strictRate, float majRate, bool precise, unsigned int unique_trees, unsigned int DUPLICATES, bool weighted, string outfilename, bool verbose){
+void simulate_from_random(string startingFile, unsigned int NUM_TREES, LabelMap lm, float strictRate, float majRate, bool precise, unsigned int unique_trees, unsigned int DUPLICATES, bool weighted, string outfilename, bool verbose){
   //this code contains the original treesim code, where we were simulating trees 
   //from purely the strict and majority consensus rate. The starting tree is always 
   //random. 
@@ -160,7 +161,7 @@ void simulate_from_random(string startingFile, unsigned int NUM_TAXA, unsigned i
     print_error(err);
   }
   else{
-    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    collect_biparts(newickTree->root, lm, 0, vec_bs);
     killnewicktree(newickTree);
   }
   fclose(fp);
@@ -307,7 +308,7 @@ void simulate_from_random(string startingFile, unsigned int NUM_TAXA, unsigned i
   
 }
 
-void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
+void simulate_from_strict(string strictFile, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
   NEWICKTREE *newickTree;
   ofstream fout;
   int err;
@@ -345,7 +346,7 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
     print_error(err);
   }
   else{
-    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    collect_biparts(newickTree->root, lm, 0, vec_bs);
     killnewicktree(newickTree);
   }
   fclose(fp);
@@ -390,7 +391,7 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TAXA, unsigned int
   }
 }
 
-void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
+void simulate_from_majority(string majFile, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
   NEWICKTREE *newickTree;
   ofstream fout;
   int err;
@@ -429,7 +430,7 @@ void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int 
     print_error(err);
   }
   else{
-    collect_biparts(newickTree->root, lm, 0, vec_bs, NUM_TAXA);
+    collect_biparts(newickTree->root, lm, 0, vec_bs);
     killnewicktree(newickTree);
   }
   fclose(fp);
@@ -491,11 +492,199 @@ void simulate_from_majority(string majFile, unsigned int NUM_TAXA, unsigned int 
   }
 }
 
+vector<bool *> read_biparts_from_treefile(string inputFile, LabelMap &lm){
+  int err;
+  FILE *fp;
+  NEWICKTREE *newickTree;
+  vector<bool *> biparts;;
+  fp = fopen(inputFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << inputFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    collect_biparts(newickTree->root, lm, 0, biparts);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+  return biparts;
+}
+
+void read_taxa_from_treefile(string inputFile, LabelMap &lm){
+  NEWICKTREE *newickTree;
+  int err;
+  FILE *fp;
+  cout << "Collecting labels from " << inputFile << endl;
+  fp = fopen(inputFile.c_str(), "r");
+  if(!fp) {
+    cerr << "ERROR: file open error:" << inputFile << endl;
+    exit(0);
+  }  
+  newickTree = loadnewicktree2(fp, &err);
+  if(!newickTree) {
+    print_error(err);
+  }
+  else{
+    PopulateTaxaLabels(newickTree->root, lm);
+    killnewicktree(newickTree);
+  }
+  fclose(fp);
+}
+
+bool cmpBipart(const bool * a, const bool * b){
+  for (unsigned int i=0; i < NUM_TAXA; i++){
+    if (a[i] != b[i])
+      return a[i] < b[i];
+  }
+  return false;
+}
+
+bool eqBipart(const bool * a, const bool * b){
+  for (unsigned int i=0; i < NUM_TAXA; i++){
+    if (a[i] != b[i])
+      return false;
+  }
+  return true;
+}
+
+bool binSearch(vector<bool*> array, bool * item, int begin, int end){
+  if (end <= begin)
+    return false;
+  if ((end - begin) == 1)
+    return (eqBipart(array[begin],item));
+  int mid = begin+(end-begin)/2;
+  if (eqBipart(array[mid],item))
+    return true;
+  if (!cmpBipart(array[mid],item))
+    return binSearch(array, item, begin, mid);
+  else
+    return binSearch(array, item, mid, end);
+}
+
+vector<bool *> compute_difference(vector<bool *>majority, vector<bool *> strict){
+  vector<bool *> diff;
+  for (unsigned int i = 0; i < majority.size(); i++){
+    if (!binSearch(strict, majority[i], 0, strict.size()))
+      diff.push_back(majority[i]);
+  
+  }
+  return diff;
+}
+
+void simulate_from_combined(string strictFile, string majFile, unsigned int NUM_TREES, bool weighted, string outfilename, bool verbose){
+  ofstream fout;
+  vector<bool *> vec_str, vec_maj, vec_dif;
+  LabelMap lm;
+  vector< vector<bool*> > tree_matrix;
+  //collect labels -- there is an assumption the strict and majority consensus trees are over the same taxa, and have the same labels.
+  //thus, we only collect the labels from the strict consensus tree
+  read_taxa_from_treefile(strictFile, lm);
+  cout << "Found: " << lm.size() << " taxa" << endl;
+  assert(lm.size() == NUM_TAXA);
+
+  //collect majority consensus bipartitions from the majority consensus tree
+  cout << "Collecting strict consensus bipartitions from " << strictFile << endl;
+  vec_str = read_biparts_from_treefile(strictFile, lm);
+  sort(vec_str.begin(), vec_str.end(), cmpBipart);
+  //again, workaround for reading multifurcating consensus trees (duplicate star bipartitions)
+  unsigned int count = 0;
+  for (unsigned int i = vec_str.size()-2; i < vec_str.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      count+=vec_str[i][j];
+  }
+  if (count == 2*NUM_TAXA)
+    vec_str.pop_back();
+  cout << "Collecting majority consensus bipartitions from " << majFile << endl;
+  vec_maj = read_biparts_from_treefile(majFile, lm);
+  sort(vec_maj.begin(), vec_maj.end(), cmpBipart);
+
+  /* cout << "Printing out strict bipartitions:" << endl;
+  for (unsigned int i = 0; i < vec_str.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      cout << vec_str[i][j];
+    cout << endl;
+    }
+
+  cout << "Printing out majority bipartitions:" << endl;
+  for (unsigned int i = 0; i < vec_maj.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      cout << vec_maj[i][j];
+    cout << endl;
+    }*/
+  cout << "computing the set difference" << endl;
+  vec_dif = compute_difference(vec_maj, vec_str);
+  /*cout << "Printing out m-s bipartitions:" << endl;
+  for (unsigned int i = 0; i < vec_dif.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      cout << vec_dif[i][j];
+    cout << endl;
+    }*/
+  cout << "    Number of Output trees = " << NUM_TREES << endl;
+  cout << "    Number of bipartitions that will be in a majority of all the trees = " << vec_maj.size()-1 << endl;
+  cout << "Detected Majority Rate=" << (float)(vec_maj.size()-1)/(NUM_TAXA-3) << endl;
+  cout << "    Number of bipartitions that will be in all the trees = " << vec_str.size()-1 << endl;
+  cout << "Detected Strict Rate=" << (float)(vec_str.size()-1)/(NUM_TAXA-3) << endl;
+
+  cout << "Building and outputting trees..." << endl;
+  //for this initial version, no duplicate options are available for this function  
+  tree_matrix.resize(NUM_TREES);
+  srand(time(NULL)); //seed random number generator
+
+  //add strict bipartitions to every tree
+  for (unsigned int i = 0; i < vec_str.size(); i++){
+    for (unsigned int j = 0; j < NUM_TREES; j++)
+      tree_matrix[j].push_back(vec_str[i]);
+  }
+  //add the biparts in dif to a majority of the trees
+  for (unsigned int i = 0; i < vec_dif.size(); i++){
+    unsigned int perc = rand() % 51 + 50; // generate a random number between 50 .. 100
+    //cout << "Adding bipartition to " << perc << "% of the trees" << endl;
+    perc = int((float(perc)/100) * NUM_TREES);
+    //cout << "perc will actually be: " << perc << endl;
+    vector<unsigned int> selected_trees = genRandomNums(perc, NUM_TREES);
+    for (unsigned int j = 0; j < selected_trees.size(); j++){
+      unsigned int tree_id = selected_trees[j];
+      tree_matrix[tree_id].push_back(vec_dif[i]);
+      //cout << "added bipartition " << vec_random[i] << "to tree " << tree_id << endl;
+    }
+  }
+
+  //now build
+  fout.open(outfilename.c_str());
+  for (unsigned numOut=0; numOut<NUM_TREES; numOut++) {
+    if (verbose && numOut % 1000 == 0)
+      cout << numOut << endl;
+    string tree = compute_tree(lm, tree_matrix[numOut], NUM_TAXA, weighted);
+    fout << tree << endl;
+    //tree_matrix[numOut].clear(); //remove the bipartitions from this
+  }
+  fout.close();
+  //delete [] star;
+  //clean up
+  for (unsigned int i = 0; i < vec_str.size(); i++){
+    if (vec_str[i]!=NULL){
+      delete [] vec_str[i];
+      vec_str[i] = NULL;
+    }
+  }
+  for (unsigned int i = 0; i < vec_dif.size(); i++){
+    if (vec_dif[i]!=NULL){
+      delete [] vec_dif[i];
+      vec_dif[i] = NULL;
+    }
+  }
+}
+
+
 int main(int argc, char** argv)
 {
   string outfilename, strictFile, majFile;
   float majRate = 0.0, strictRate = 0.0;
-  unsigned int NUM_TAXA = 0, NUM_TREES = 0, unique_trees = 0, DUPLICATES=0;
+  unsigned int NUM_TREES = 0, unique_trees = 0, DUPLICATES=0;
   bool verbose = false, precise = false, weighted=false;
   // TCLAP
   try {
@@ -590,7 +779,7 @@ int main(int argc, char** argv)
   //NEWICKTREE *newickTree;
   //int err;
   //FILE *fp;
-  if (strictFile == "strict.tre" && majFile == "maj.tre"){
+  if (strictFile == "strict.tre" && majFile == "maj.tre"){ //no input consensus provided
     fprintf(stderr, "Generating a random tree with %u taxa...\n", NUM_TAXA);
     vector<bool *> random_tree_bs;
     bool * star = new bool[NUM_TAXA];
@@ -610,20 +799,21 @@ int main(int argc, char** argv)
     fprintf(stderr, "Done. starting tree outputted to starting.tre.\n");
     random_tree_bs.clear();
     delete [] star;
-    simulate_from_random("starting.tre", NUM_TAXA, NUM_TREES, lm, strictRate, majRate, precise, unique_trees, DUPLICATES, weighted, outfilename, verbose);
+    simulate_from_random("starting.tre", NUM_TREES, lm, strictRate, majRate, precise, unique_trees, DUPLICATES, weighted, outfilename, verbose);
   }
   else{
     if (strictFile != "strict.tre" && majFile == "maj.tre"){
       cout << "Algorithm: Strict Consensus Resolution (From Consensus Input)" << endl;
-      simulate_from_strict(strictFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
+      simulate_from_strict(strictFile, NUM_TREES, weighted, outfilename, verbose);
       
     }
     else if (strictFile == "strict.tre" && majFile != "maj.tre"){
       cout << "Algorithm: Majority Consensus Resolution (From Consensus Input)" << endl;
-      simulate_from_majority(majFile, NUM_TAXA, NUM_TREES, weighted, outfilename, verbose);
+      simulate_from_majority(majFile, NUM_TREES, weighted, outfilename, verbose);
     }
     else{
-      cout << "we will construct the combined consensus resolution tree using the trees located in " << strictFile << " and " << majFile << "!" << endl;
+      cout << "Algorithm: Combined Consensus Resolution (From Consensus Input)" << endl;
+      simulate_from_combined(strictFile, majFile, NUM_TREES, weighted, outfilename, verbose);
     }
   }
   
