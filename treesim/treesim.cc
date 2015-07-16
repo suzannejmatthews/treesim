@@ -352,7 +352,7 @@ void simulate_from_strict(string strictFile, unsigned int NUM_TREES, bool weight
   fclose(fp);
   cout << "done." << endl;
 
-  cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
+
   unsigned int count = 0;
   //this is a workaround -- for some reason, on some multifurcating sets two!! star bipartitions get collected at the end.
   //what is up with that?
@@ -435,12 +435,8 @@ void simulate_from_majority(string majFile, unsigned int NUM_TREES, bool weighte
   }
   fclose(fp);
 
-  unsigned int total_BPs = vec_bs.size()-1;
-  float maj_rate = (float)total_BPs/(NUM_TAXA-3);
-  cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
-  cout << "    Number of Output trees = " << NUM_TREES << endl;
-  cout << "    Number of bipartitions that will be in a majority of all the trees = " << total_BPs << endl;
-  cout << "Detected Majority Rate=" << maj_rate << endl;
+  
+
   //again, workaround for reading multifurcating consensus trees (duplicate star bipartitions)
   unsigned int count = 0;
   for (unsigned int i = vec_bs.size()-2; i < vec_bs.size(); i++){
@@ -449,6 +445,20 @@ void simulate_from_majority(string majFile, unsigned int NUM_TREES, bool weighte
   }
   if (count == 2*NUM_TAXA)
     vec_bs.pop_back();
+
+  cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
+  for (unsigned int i = 0; i < vec_bs.size(); i++){
+    for (unsigned int j = 0; j < NUM_TAXA; j++)
+      cout << vec_bs[i][j];
+    cout << endl;
+  }
+
+  unsigned int total_BPs = vec_bs.size()-1;
+  float maj_rate = (float)total_BPs/(NUM_TAXA-3);
+  cout << "    vec_bs.size() = " << vec_bs.size()-1 << endl;
+  cout << "    Number of Output trees = " << NUM_TREES << endl;
+  cout << "    Number of bipartitions that will be in a majority of all the trees = " << total_BPs << endl;
+  cout << "Detected Majority Rate=" << maj_rate << endl;
 
   //for this initial version, no duplicate options are available for this function  
   tree_matrix.resize(NUM_TREES);
