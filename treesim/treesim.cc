@@ -446,12 +446,12 @@ void simulate_from_majority(string majFile, unsigned int NUM_TREES, bool weighte
   if (count == 2*NUM_TAXA)
     vec_bs.pop_back();
 
-  cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
+  /*cerr << "**** PRINTING OUT BIPARTITIONS***" << endl;
   for (unsigned int i = 0; i < vec_bs.size(); i++){
     for (unsigned int j = 0; j < NUM_TAXA; j++)
       cout << vec_bs[i][j];
     cout << endl;
-  }
+    }*/
 
   unsigned int total_BPs = vec_bs.size()-1;
   float maj_rate = (float)total_BPs/(NUM_TAXA-3);
