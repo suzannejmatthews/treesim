@@ -1,0 +1,3 @@
+2 runs of Bayesian analysis
+Run 0: 10000 trees
+Run 1: 10000 trees

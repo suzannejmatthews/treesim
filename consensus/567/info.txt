@@ -1,0 +1,13 @@
+12 Runs of Bayesian analysis
+Run 0:  3177 trees
+Run 1:  3178 trees
+Run 2:  3178 trees
+Run 3:  3179 trees
+Run 4:  2985 trees
+Run 5:  2985 trees
+Run 6:  2986 trees
+Run 7:  2987 trees
+Run 8:  2162 trees
+Run 9:  2162 trees
+Run 10: 2163 trees
+Run 11: 2164 trees

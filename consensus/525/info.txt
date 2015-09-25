@@ -1,0 +1,6 @@
+5 Runs of Parsimony Analysis
+Run 0: 30000 trees
+Run 1: 30000 trees
+Run 2: 30000 trees
+Run 3: 30000 trees
+Run 4: 30000 trees
