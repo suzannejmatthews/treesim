@@ -59,4 +59,4 @@ We make the strict and majority consensus trees generated from HashCS available 
 ##Citation info
 If you use TreeSim, we ask that you cite the following publication:
 
-Matthews SJ. "Accurate Simulation of Large Collections of Phylogenetic Trees". Accepted to 2015 IEEE International Conference on Bioinformatics and Biomedicine (BIBM'15). To appear.
+Matthews SJ. "Accurate Simulation of Large Collections of Phylogenetic Trees". In Proceedings of the 2015 IEEE International Conference on Bioinformatics and Biomedicine (BIBM'15). To appear.
